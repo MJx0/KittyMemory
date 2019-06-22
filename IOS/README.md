@@ -1,1 +1,1 @@
-Still working on it
+This is an example theos tweak project, explanation in source files.<br/>

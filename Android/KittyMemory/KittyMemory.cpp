@@ -7,25 +7,26 @@
 #include "KittyMemory.h"
 
 using KittyMemory::Memory_Status;
+using KittyMemory::ProcMap;
 
 
 bool KittyMemory::ProtectAddr(void *addr, size_t length, int protection) {
-   void     *pageStart = (void *)_PAGE_START_OF_(addr);
+   uintptr_t pageStart = _PAGE_START_OF_(addr);
    uintptr_t pageLen   = _PAGE_LEN_OF_(addr, length);
    return (
-     mprotect(pageStart, pageLen, protection) != -1
+     mprotect(reinterpret_cast<void *>(pageStart), pageLen, protection) != -1
  );
 }
 
 
-Memory_Status KittyMemory::Write(void *addr, const void *buffer, size_t len) {
+Memory_Status KittyMemory::memWrite(void *addr, const void *buffer, size_t len) {
     if (addr == NULL)
         return INV_ADDR;
 
     if (buffer == NULL)
         return INV_BUF;
 
-    if (len < 1)
+    if (len < 1 || len > INT_MAX)
         return INV_LEN;
 
     if (!ProtectAddr(addr, len, _PROT_RWX_))
@@ -38,14 +39,14 @@ Memory_Status KittyMemory::Write(void *addr, const void *buffer, size_t len) {
 }
 
 
-Memory_Status KittyMemory::Read(void *buffer, const void *addr, size_t len) {
+Memory_Status KittyMemory::memRead(void *buffer, const void *addr, size_t len) {
     if (addr == NULL)
         return INV_ADDR;
 
     if (buffer == NULL)
         return INV_BUF;
 
-    if (len < 1)
+    if (len < 1 || len > INT_MAX)
         return INV_LEN;
 
     if (memcpy(buffer, addr, len) != NULL)
@@ -65,7 +66,7 @@ std::string KittyMemory::read2HexStr(const void *addr, size_t len) {
 
     std::string ret = "0x";
 
-    if (Read(temp, addr, len) != SUCCESS)
+    if (memRead(temp, addr, len) != SUCCESS)
         return ret;
 
     for (int i = 0; i < len; i++) {
@@ -76,32 +77,37 @@ std::string KittyMemory::read2HexStr(const void *addr, size_t len) {
     return ret;
 }
 
-uintptr_t KittyMemory::getLibraryBase(const char *libName) {
-    uintptr_t retAddr = 0;
-	
-    char fileName[255];
-    memset(fileName, 0, sizeof(fileName));
-	
-    char buffer[1024];
-    memset(buffer, 0, sizeof(buffer));
+ProcMap KittyMemory::getLibraryMap(const char *libraryName) {
+    ProcMap retMap;
+    char line[512] = {0};
 
-    snprintf(fileName, sizeof(fileName), "/proc/%d/maps", getpid());
-    FILE *fp = fopen(fileName, "rt");
+    FILE *fp = fopen("/proc/self/maps", "rt");
     if (fp != NULL) {
-        while (fgets(buffer, sizeof(buffer), fp)) {
-            if (strstr(buffer, libName) != NULL) {
-                retAddr = (uintptr_t) strtoul(buffer, NULL, 16);
+        while (fgets(line, sizeof(line), fp)) {
+            if (strstr(line, libraryName)) {
+                char tmpPerms[5] = {0}, tmpDev[12] = {0}, tmpPathname[444] = {0};
+                // parse a line in maps file
+                // (format) startAddress-endAddress perms offset dev inode pathname
+                sscanf(line, "%llx-%llx %s %ld %s %d %s",
+                       (long long unsigned *) &retMap.startAddr,
+                       (long long unsigned *) &retMap.endAddr,
+                       tmpPerms, &retMap.offset, tmpDev, &retMap.inode, tmpPathname);
+
+                retMap.length = (uintptr_t) retMap.endAddr - (uintptr_t) retMap.startAddr;
+                retMap.perms = tmpPerms;
+                retMap.dev = tmpDev;
+                retMap.pathname = tmpPathname;
                 break;
             }
         }
         fclose(fp);
     }
-    return retAddr;
+    return retMap;
 }
 
-uintptr_t KittyMemory::getAbsoluteAddress(const char *libName, uintptr_t relativeAddr) {
-    uintptr_t base = getLibraryBase(libName);
-    if (base == 0)
+uintptr_t KittyMemory::getAbsoluteAddress(const char *libraryName, uintptr_t relativeAddr) {
+    ProcMap libMap = getLibraryMap(libraryName);
+    if (!libMap.isValid())
         return 0;
-    return (base + relativeAddr);
+    return (reinterpret_cast<uintptr_t>(libMap.startAddr) + relativeAddr);
 }

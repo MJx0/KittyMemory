@@ -1,6 +1,6 @@
-#include "KittyMemory/MemoryPatch.h"
 #include <pthread.h>
-
+#include "KittyMemory/MemoryPatch.h"
+#include "Logger.h"
 
 // fancy struct for patches
  struct My_Patches {
@@ -14,9 +14,15 @@
 // we will run our patches in a new thread so "sleep" doesn't block process main thread
 void *my_test_thread(void *) {
 	LOGD("I have been loaded...");
-    // sleep for 15 second, just to make sure our target lib has been loaded into process map
-    // you can probably change this check to whatever, but we'll take this in our example
-    sleep(15);
+    
+	// loop until our target library is found
+	ProcMap il2cppMap;
+	do {
+		il2cppMap = KittyMemory::getLibraryMap("libil2cpp.so");
+		sleep(1);
+	} while(!il2cppMap.isValid());
+	
+	
 
     // now here we do our stuff
     // let's say our patches are meant for an arm library

@@ -1,18 +1,24 @@
 //
 //  KittyMemory.hpp
 //
+//
 //  Created by MJ (Ruit) on 1/1/19.
 //
+//
 
-#ifndef KittyMemory_h
-#define KittyMemory_h
+#ifndef KittyMemory_hpp
+#define KittyMemory_hpp
 
 #include <stdio.h>
 #include <string>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <mach-o/dyld.h>
+#include <mach/mach.h>
+#include <libkern/OSCacheControl.h>
 #include <vector>
 
+#define BAD_KERN_CALL(call) call != KERN_SUCCESS
 
 #define _SYS_PAGE_SIZE_ (sysconf(_SC_PAGE_SIZE))
 
@@ -23,6 +29,7 @@
 
 #define _PROT_RWX_ (PROT_READ | PROT_WRITE | PROT_EXEC)
 #define _PROT_RX_  (PROT_READ | PROT_EXEC)
+#define _PROT_RW_  (PROT_READ | PROT_WRITE)
 
 
 #define EMPTY_VEC_OFFSET std::vector<int>()
@@ -36,43 +43,34 @@ namespace KittyMemory {
         INV_ADDR = 2,
         INV_LEN = 3,
         INV_BUF = 4,
-        INV_PROT = 5
+        INV_PROT = 5,
+        INV_KERN_CALL = 6,
+        INV_MAP = 7
     } Memory_Status;
 
 
-    struct ProcMap {
-        void *startAddr;
-        void *endAddr;
-        size_t length;
-        std::string perms;
-        long offset;
-        std::string dev;
-        int inode;
-        std::string pathname;
+    typedef struct {
+        int index;
+        const mach_header *header;
+        const char *name;
+        intptr_t address;
+    } memory_file_info;
 
-        bool isValid() { return (startAddr != NULL && endAddr != NULL && !pathname.empty()); }
-    };
 
     /*
-   * Changes protection of an address with given length
-   */
-    bool ProtectAddr(void *addr, size_t length, int protection);
-
-    /*
-    * Writes buffer content to an address
-   */
-    Memory_Status memWrite(void *addr, const void *buffer, size_t len);
-
-    /*
-   * Reads an address content into a buffer
-   */
-    Memory_Status memRead(void *buffer, const void *addr, size_t len);
-
-    /*
-     * Reads an address content and returns hex string
+     * Changes protection of an address with given length
      */
-    std::string read2HexStr(const void *addr, size_t len);
+    bool ProtectAddr(void *address, size_t length, int protection, bool aligned);
 
+    /*
+     * Writes buffer content to an address
+     */
+    Memory_Status memWrite(void *address, const void *buffer, size_t len);
+
+    /*
+     * Reads an address content into a buffer
+     */
+    Memory_Status memRead(void *buffer, const void *addr, size_t len);
 
     /*
      * Wrapper to dereference & get value of a multi level pointer
@@ -130,8 +128,8 @@ namespace KittyMemory {
         *reinterpret_cast<Type *>(finalPtr) = val;
         return true;
     }
-	
-	
+
+
 	/*
      * Wrapper to dereference & get value of a pointer
      * Make sure to use the correct data type!
@@ -144,8 +142,8 @@ namespace KittyMemory {
 
         return *reinterpret_cast<Type *>(ptr);
     }
-	
-	
+
+
 	/*
      * Wrapper to dereference & set value of a pointer
      * Make sure to use the correct data type!, const objects won't work
@@ -158,18 +156,31 @@ namespace KittyMemory {
         *reinterpret_cast<Type *>(ptr) = val;
         return true;
     }
-	
-	
-    /*
-     * Gets info of a mapped library in self process
-     */
-    ProcMap getLibraryMap(const char *libraryName);
+
 
     /*
-    * Expects a relative address in a library
-    * Returns final absolute address
+     * Reads an address content and returns hex string
+     */
+    std::string read2HexStr(const void *address, size_t len);
+
+
+    kern_return_t getPageInfo(void *page_start, vm_region_submap_short_info_64 *outInfo);
+
+    /*
+    * returns base executable info
     */
-    uintptr_t getAbsoluteAddress(const char *libraryName, uintptr_t relativeAddr);
+    memory_file_info getBaseInfo();
+
+    /*
+    * find in memory file info
+    */
+    memory_file_info getMemoryFileInfo(const char *fileName);
+
+    /*
+    * returns relative address of file in memory, NULL as fileName will return base executable
+    */
+    uint64_t getAbsoluteAddress(const char *fileName, uint64_t address);
+
 };
 
-#endif /* KittyMemory_h */
+#endif /* KittyMemory_hpp */

@@ -9,14 +9,12 @@
 
 #include <vector>
 
-#include "KittyMemory.h"
-using KittyMemory::Memory_Status;
-using KittyMemory::ProcMap;
+#include "KittyMemory.hpp"
 
 
 class MemoryPatch {
 private:
-    uintptr_t _address;
+    void     *_address;
     size_t    _size;
 
     std::vector<uint8_t> _orig_code;
@@ -26,9 +24,15 @@ public:
     MemoryPatch();
 
     /*
-     * expects library name and relative address
+     * expects an already calculated address
      */
-    MemoryPatch(const char *libraryName, uintptr_t address,
+    MemoryPatch(uint64_t absolute_address,
+                             const void *patch_code, size_t patch_size);
+
+    /*
+     * expects file name and relative address, you can pass NULL as filename for base executable
+     */
+    MemoryPatch(const char *fileName, uint64_t address,
             const void *patch_code, size_t patch_size);
 
 
@@ -45,7 +49,7 @@ public:
     /*
      * Returns pointer to the target address
      */
-    uintptr_t get_TargetAddress() const;
+    void *get_TargetAddress() const;
 
 
     /*

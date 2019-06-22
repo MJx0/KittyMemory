@@ -7,9 +7,11 @@
 #ifndef MemoryPatch_h
 #define MemoryPatch_h
 
-#include "KittyMemory.h"
 #include <vector>
+
+#include "KittyMemory.h"
 using KittyMemory::Memory_Status;
+using KittyMemory::ProcMap;
 
 
 class MemoryPatch {
