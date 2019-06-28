@@ -12,6 +12,8 @@
 
 using KittyMemory::Memory_Status;
 
+
+// mey not be accurate
 static bool cydiaExist(){
   bool ret = false;
   FILE *f = NULL;

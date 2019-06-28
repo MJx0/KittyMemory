@@ -14,7 +14,7 @@
 
 
 
-bool writeData(uint64_t offset, uint8_t data)
+bool writeData8(uint64_t offset, uint8_t data)
 {
 	const size_t sz = sizeof(uint8_t);
 

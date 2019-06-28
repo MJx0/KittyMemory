@@ -14,34 +14,32 @@
 #ifndef writeData_h
 #define writeData_h
 
+#include <math.h>
 #include "MemoryPatch.hpp"
 
 
 #define BITS_IN_BYTE 8
 
 
+// https://www.exploringbinary.com/number-of-bits-in-a-decimal-integer/
 // returns bits size of an integer
-template<typename T>
-size_t findBits(T data) 
+inline int findBits(uint64_t n) 
 { 
-   size_t bits = 0; 
-   while (data) 
-   { 
-        bits++; 
-        data >>= 1; 
-   } 
-   return bits; 
+   if(n > 0)
+   {
+	   return floor(log(n)/log(2))+1;
+   }
+   return 0;
 } 
 
 
 // returns bytes size of an integer
-template<typename T>
-size_t findBytes(T data) 
+inline size_t findBytes(uint64_t data) 
 { 
-   size_t bits = findBits(data);
+   int bits = findBits(data);
    if(bits > 0)
    {
-	   return bits / BITS_IN_BYTE;
+	   return (size_t)(bits / BITS_IN_BYTE);
    }
    return 0;
 } 
@@ -67,7 +65,7 @@ void SwapData(T& data)
 	}
 }
 
-bool writeData  (uint64_t offset, uint8_t  data);
+bool writeData8 (uint64_t offset, uint8_t  data);
 bool writeData16(uint64_t offset, uint16_t data);
 bool writeData32(uint64_t offset, uint32_t data);
 bool writeData64(uint64_t offset, uint64_t data);
