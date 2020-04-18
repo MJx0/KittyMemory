@@ -18,7 +18,12 @@ bool KittyUtils::validateHexString(std::string &xstr){
     if(xstr.length() < 2) return false;
     xtrim(xstr); // first remove spaces
     if(xstr.length() % 2 != 0) return false;
-    return std::all_of(xstr.begin(), xstr.end(), [](unsigned char c){ return std::isxdigit(c); });
+    for(size_t i = 0; i < xstr.length(); i++){
+        if(!std::isxdigit((unsigned char)xstr[i])){
+            return false;
+        }
+    }
+    return true;
 }
 
 
