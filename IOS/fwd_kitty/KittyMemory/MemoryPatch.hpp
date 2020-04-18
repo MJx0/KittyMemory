@@ -4,12 +4,12 @@
 //  Created by MJ (Ruit) on 1/1/19.
 //
 
-#ifndef MemoryPatch_h
-#define MemoryPatch_h
+#pragma once
 
 #include <vector>
 
 #include "KittyMemory.hpp"
+#include "KittyUtils.hpp"
 
 
 class MemoryPatch {
@@ -19,6 +19,8 @@ private:
 
     std::vector<uint8_t> _orig_code;
     std::vector<uint8_t> _patch_code;
+
+    std::string _hexString;
 
 public:
     MemoryPatch();
@@ -37,6 +39,12 @@ public:
 
 
     ~MemoryPatch();
+
+    /*
+    * compatible hex format (0xffff & ffff & ff ff)
+    */
+    static MemoryPatch createWithHex(const char *fileName, uint64_t address, std::string hex);
+    static MemoryPatch createWithHex(uint64_t absolute_address, std::string hex);
 
     /*
      * Validate patch
@@ -67,7 +75,5 @@ public:
     /*
      * Returns current patch target address bytes as hex string
      */
-    std::string ToHexString();
+    std::string get_CurrBytes();
 };
-
-#endif /* MemoryPatch_h */

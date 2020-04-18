@@ -4,24 +4,29 @@
 //  Created by MJ (Ruit) on 1/1/19.
 //
 
-#ifndef Logger_h
-#define Logger_h
+#pragma once
+
 
 #include <jni.h>
 #include <android/log.h>
 
 enum LogType {
-    oDEBUG = 3,
-    oERROR = 6,
-    oINFO  = 4,
-    oWARN  = 5
+    eDEBUG = 3,
+    eINFO  = 4,
+    eWARN  = 5,
+    eERROR = 6,
 };
 
-#define TAG "KittyMemory"
+#define __LOG_TAG__ "KittyMemory"
 
-#define LOGD(...) ((void)__android_log_print(oDEBUG, TAG, __VA_ARGS__))
-#define LOGE(...) ((void)__android_log_print(oERROR, TAG, __VA_ARGS__))
-#define LOGI(...) ((void)__android_log_print(oINFO,  TAG, __VA_ARGS__))
-#define LOGW(...) ((void)__android_log_print(oWARN,  TAG, __VA_ARGS__))
+#define __DEBUG_BUILD__
 
-#endif /* Logger_h */
+#ifdef __DEBUG_BUILD__
+#define LOGD(...) ((void)__android_log_print(eDEBUG, __LOG_TAG__, __VA_ARGS__))
+#else
+#define LOGD(...)
+#endif
+
+#define LOGE(...) ((void)__android_log_print(eERROR, __LOG_TAG__, __VA_ARGS__))
+#define LOGI(...) ((void)__android_log_print(eINFO,  __LOG_TAG__, __VA_ARGS__))
+#define LOGW(...) ((void)__android_log_print(eWARN,  __LOG_TAG__, __VA_ARGS__))

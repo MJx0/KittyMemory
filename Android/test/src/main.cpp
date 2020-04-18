@@ -3,12 +3,12 @@
 #include "Logger.h"
 
 // fancy struct for patches
- struct My_Patches {
+ struct GlobalPatches {
      // let's assume we have patches for these functions for whatever game
 	 // like show in miniMap boolean function
      MemoryPatch canShowInMinimap;
      // etc...
- }my_cool_Patches;
+ }gPatches;
 
 
 // we will run our patches in a new thread so "sleep" doesn't block process main thread
@@ -22,9 +22,11 @@ void *my_test_thread(void *) {
 		sleep(1);
 	} while(!il2cppMap.isValid());
 	
+    // wait more to make sure lib is fully loaded and ready
+    sleep(1);
 	
 
-    // now here we do our stuff
+    // now we can do our stuff
     // let's say our patches are meant for an arm library
 
     // http://shell-storm.org/online/Online-Assembler-and-Disassembler/
@@ -34,24 +36,38 @@ void *my_test_thread(void *) {
     */
 	// address = 0x6A6144
     // bytes len = 8
-    my_cool_Patches.canShowInMinimap = MemoryPatch("libil2cpp.so", 0x6A6144,
+    // patch simple boolean return
+    gPatches.canShowInMinimap = MemoryPatch("libil2cpp.so", 0x6A6144,
                                           "\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1", 8);
 
+    // by default MemoryPatch will cache library map for faster lookup when use getAbsoluteAddress
+    // You can disable this by passing false for last argument
+    //gPatches.canShowInMinimap = MemoryPatch("libil2cpp.so", 0x6A6144, "\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1", 8, false);
+
+    // also possible with hex & no need to specify len
+     gPatches.canShowInMinimap = MemoryPatch::createWithHex("libil2cpp.so", 0x6A6144, "0100A0E31EFF2FE1");
+
+    // spaces are fine too
+     gPatches.canShowInMinimap = MemoryPatch::createWithHex("libil2cpp.so", 0x6A6144, "01 00 A0 E3 1E FF 2F E1");
+
     LOGD("===== New Patch Entry =====");
-    LOGD("Patch Address: %p", (void *)my_cool_Patches.canShowInMinimap.get_TargetAddress());
-    LOGD("Patch Size: %zu", my_cool_Patches.canShowInMinimap.get_PatchSize());
-    LOGD("Current Bytes: %s", my_cool_Patches.canShowInMinimap.ToHexString().c_str());
+
+    LOGD("Patch Address: %p", (void *)gPatches.canShowInMinimap.get_TargetAddress());
+    LOGD("Patch Size: %zu", gPatches.canShowInMinimap.get_PatchSize());
+    LOGD("Current Bytes: %s", gPatches.canShowInMinimap.get_CurrBytes().c_str());
 
     // modify & print bytes
-    if (my_cool_Patches.canShowInMinimap.Modify()) {
+    if (gPatches.canShowInMinimap.Modify()) {
         LOGD("canShowInMinimap has been modified successfully");
-        LOGD("Current Bytes: %s", my_cool_Patches.canShowInMinimap.ToHexString().c_str());
+        LOGD("Current Bytes: %s", gPatches.canShowInMinimap.get_CurrBytes().c_str());
     }
+    
     // restore & print bytes
-    if (my_cool_Patches.canShowInMinimap.Restore()) {
+    if (gPatches.canShowInMinimap.Restore()) {
         LOGD("canShowInMinimap has been restored successfully");
-        LOGD("Current Bytes: %s", my_cool_Patches.canShowInMinimap.ToHexString().c_str());
+        LOGD("Current Bytes: %s", gPatches.canShowInMinimap.get_CurrBytes().c_str());
     }
+
     LOGD("===========================");
 
     return NULL;

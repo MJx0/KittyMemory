@@ -13,7 +13,7 @@
 using KittyMemory::Memory_Status;
 
 
-// mey not be accurate
+// may not be accurate
 static bool cydiaExist(){
   bool ret = false;
   FILE *f = NULL;
@@ -153,7 +153,7 @@ std::string KittyMemory::read2HexStr(const void *addr, size_t len) {
     char buffer[bufferLen];
     memset(buffer, 0, bufferLen);
 
-    std::string ret = "0x";
+    std::string ret;
 
     if (memRead(temp, addr, len) != SUCCESS)
         return ret;

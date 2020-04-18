@@ -4,10 +4,11 @@
 //  Created by MJ (Ruit) on 1/1/19.
 //
 
-#ifndef MemoryPatch_h
-#define MemoryPatch_h
+#pragma once
 
 #include <vector>
+
+#include "KittyUtils.h"
 
 #include "KittyMemory.h"
 using KittyMemory::Memory_Status;
@@ -22,6 +23,8 @@ private:
     std::vector<uint8_t> _orig_code;
     std::vector<uint8_t> _patch_code;
 
+    std::string _hexString;
+
 public:
     MemoryPatch();
 
@@ -29,10 +32,23 @@ public:
      * expects library name and relative address
      */
     MemoryPatch(const char *libraryName, uintptr_t address,
+            const void *patch_code, size_t patch_size, bool useMapCache=true);
+
+
+    /*
+     * expects absolute address
+     */
+    MemoryPatch(uintptr_t absolute_address, 
             const void *patch_code, size_t patch_size);
 
 
     ~MemoryPatch();
+
+    /*
+    * compatible hex format (0xffff & ffff & ff ff)
+    */
+    static MemoryPatch createWithHex(const char *libraryName, uintptr_t address, std::string hex, bool useMapCache=true);
+    static MemoryPatch createWithHex(uintptr_t absolute_address, std::string hex);
 
     /*
      * Validate patch
@@ -63,7 +79,5 @@ public:
     /*
      * Returns current patch target address bytes as hex string
      */
-    std::string ToHexString();
+    std::string get_CurrBytes();
 };
-
-#endif /* MemoryPatch_h */

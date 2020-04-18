@@ -4,8 +4,7 @@
 //  Created by MJ (Ruit) on 1/1/19.
 //
 
-#ifndef KittyMemory_h
-#define KittyMemory_h
+#pragma once
 
 #include <stdio.h>
 #include <string>
@@ -169,7 +168,5 @@ namespace KittyMemory {
     * Expects a relative address in a library
     * Returns final absolute address
     */
-    uintptr_t getAbsoluteAddress(const char *libraryName, uintptr_t relativeAddr);
+    uintptr_t getAbsoluteAddress(const char *libraryName, uintptr_t relativeAddr, bool useCache=false);
 };
-
-#endif /* KittyMemory_h */

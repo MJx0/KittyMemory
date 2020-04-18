@@ -6,8 +6,8 @@
 //
 //
 
-#ifndef KittyMemory_hpp
-#define KittyMemory_hpp
+#pragma once
+
 
 #include <stdio.h>
 #include <string>
@@ -182,5 +182,3 @@ namespace KittyMemory {
     uint64_t getAbsoluteAddress(const char *fileName, uint64_t address);
 
 };
-
-#endif /* KittyMemory_hpp */
