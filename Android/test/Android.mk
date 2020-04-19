@@ -6,6 +6,7 @@ LOCAL_MODULE    := KittyMemory
 
 KITTYMEMORY_SRC = src/KittyMemory/KittyMemory.cpp \
 src/KittyMemory/MemoryPatch.cpp \
+src/KittyMemory/MemoryBackup.cpp \
 src/KittyMemory/KittyUtils.cpp
 
 LOCAL_SRC_FILES := src/main.cpp $(KITTYMEMORY_SRC)
