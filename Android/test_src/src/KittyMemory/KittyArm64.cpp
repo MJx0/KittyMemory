@@ -6,6 +6,7 @@
 // https://github.com/capstone-engine/capstone
 // https://github.com/qemu/QEMU
 // https://reverseengineering.stackexchange.com/questions/15418/getting-function-address-by-reading-adrp-and-add-instruction-values
+// https://stackoverflow.com/questions/41906688/what-are-the-semantics-of-adrp-and-adrl-instructions-in-arm-assembly
 
 namespace KittyArm64
 {
@@ -33,25 +34,32 @@ namespace KittyArm64
 	// decode adr/adrp
 	bool decode_adr_imm(uint32_t insn, int64_t *imm)
 	{
-		const int mask19 = (1 << 19) - 1;
-		const int mask2 = 3;
-
 		if (is_insn_adr(insn) || is_insn_adrp(insn))
 		{
 			// 21-bit imm encoded in adrp.
-			uint64_t imm_val = ((insn >> 29) & mask2) | (((insn >> 5) & mask19) << 2);
-			// Retrieve msb of 21-bit-signed imm for sign extension.
-			uint64_t msbt = (imm_val >> 20) & 1;
+			int64_t imm_val = bits_from(insn, 5, 19) << 2; // immhi
+			imm_val |= bits_from(insn, 29, 2);			   // immlo
 
-			if (!is_insn_adr(insn))
+			if (is_insn_adrp(insn))
 			{
+				// Retrieve msb of 21-bit-signed imm for sign extension.
+				uint64_t msbt = (imm_val >> 20) & 1;
+				
 				// Real value is imm multiplied by 4k. Value now has 33-bit information.
 				imm_val <<= 12;
-			}
 
-			// Sign extend to 64-bit by repeating msbt 31 (64-33) times and merge it
-			// with value.
-			*imm = ((((uint64_t)(1) << 32) - msbt) << 33) | imm_val;
+				// Sign extend to 64-bit by repeating msbt 31 (64-33) times and merge it
+				// with value.
+				*imm = ((((uint64_t)(1) << 32) - msbt) << 33) | imm_val;
+			}
+			else // adr
+			{
+				// Sign-extend the 21-bit immediate.
+				if (imm_val & (1 << (21 - 1)))
+					imm_val |= ~((1LL << 21) - 1);
+
+				*imm = imm_val;
+			}
 
 			return true;
 		}
@@ -107,10 +115,8 @@ namespace KittyArm64
 		if (is_insn_ldst_uimm(insn))
 		{
 			*imm12 = bits_from(insn, 10, 12);
-			if (*imm12)
-			{
-				*imm12 <<= 3;
-			}
+			// shift with scale value
+			*imm12 <<= bits_from(insn, 30, 2); // size bits
 
 			return true;
 		}
