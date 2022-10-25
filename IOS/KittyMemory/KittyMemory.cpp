@@ -53,10 +53,6 @@ namespace KittyMemory
         if (len < 1 || len > INT_MAX)
             return INV_LEN;
 
-        // check for cydia MSHookMemory existance first
-        if (findMSHookMemory(address, buffer, len))
-            return SUCCESS;
-
         void *page_start = reinterpret_cast<void *>(_PAGE_START_OF_(address));
         void *page_offset = reinterpret_cast<void *>(_PAGE_OFFSET_OF_(address));
         size_t page_len = _PAGE_LEN_OF_(address, len);
@@ -72,6 +68,10 @@ namespace KittyMemory
             else
                 return FAILED;
         }
+
+        // check for cydia MSHookMemory existance first
+        if (findMSHookMemory(address, buffer, len))
+            return SUCCESS;
 
         // create new map, copy our code to it then remap it over target map
 
@@ -202,9 +202,10 @@ bool findMSHookMemory(void *dst, const void *src, size_t len)
 
     if (!checked)
     {
-        if (KittyMemory::getMemoryFileInfo("libsubstrate.dylib").header)
+        MSImageRef image = MSGetImageByName("/usr/lib/libsubstrate.dylib");
+        if(image) 
         {
-            fnPtr = MSFindSymbol(NULL, "_MSHookMemory");
+            fnPtr = MSFindSymbol(image, "_MSHookMemory");
         }
         checked = true;
     }
