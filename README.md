@@ -1,2 +1,2 @@
 # KittyMemory
-This library aims for runtime code patching for both Android and iOS
+Dedicated library for runtime code patching & some memory utilities for both Android and iOS

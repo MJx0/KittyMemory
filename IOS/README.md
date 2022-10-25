@@ -1,1 +1,3 @@
-This is an example theos tweak project, explanation in source files.<br/>
+# KittyMemory
+runtime memory patch library made specifically for iOS.<br/>
+Check example code for how to use.
