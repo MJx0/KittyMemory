@@ -21,12 +21,12 @@ namespace KittyScanner
         return !*mask;
     }
 
-    uintptr_t findInRange(const uintptr_t start, uintptr_t end,
-                   const char *pattern, const char *mask)
+    uintptr_t findInRange(const uintptr_t start, const uintptr_t end,
+                   const char *pattern, const std::string& mask)
     {
-        const size_t scan_size = strlen(mask);
+        const size_t scan_size = mask.length();
 
-        if ((start + scan_size) > end)
+        if (scan_size < 1 || ((start + scan_size) > end))
             return 0;
 
         const size_t length = end - start;
@@ -37,7 +37,7 @@ namespace KittyScanner
             if (current_end > end)
                 break;
 
-            if (!compare(reinterpret_cast<const char *>(start + i), pattern, mask))
+            if (!compare(reinterpret_cast<const char *>(start + i), pattern, mask.c_str()))
                 continue;
 
             return start + i;
@@ -45,20 +45,20 @@ namespace KittyScanner
         return 0;
     }
 
-    std::vector<uintptr_t> findBytesAll(const KittyMemory::ProcMap &map,
-                                        const char *bytes, const char *mask)
+    std::vector<uintptr_t> findBytesAll(const uintptr_t start, const uintptr_t end,
+                                        const char *bytes, const std::string& mask)
     {
         std::vector<uintptr_t> list;
 
-        if (!map.isValid())
+        if (start >= end)
             return list;
 
-        uintptr_t curr_search_address = map.startAddress;
-        const size_t scan_size = strlen(mask);
+        uintptr_t curr_search_address = start;
+        const size_t scan_size = mask.length();
         do {
             if (!list.empty()) curr_search_address = list.back() + scan_size;
             
-            uintptr_t found = findInRange(curr_search_address, map.endAddress, bytes, mask);
+            uintptr_t found = findInRange(curr_search_address, end, bytes, mask);
             if (!found) break;
 
             list.push_back(found);
@@ -67,66 +67,65 @@ namespace KittyScanner
         return list;
     }
 
-    uintptr_t findBytesFirst(const KittyMemory::ProcMap &map, const char *bytes, const char *mask)
+    uintptr_t findBytesFirst(const uintptr_t start, const uintptr_t end, const char *bytes, const std::string& mask)
     {
-        if (!map.isValid() || !bytes || !mask)
+        if (start >= end || !bytes || mask.empty())
             return 0;
 
-        return findInRange(map.startAddress, map.endAddress, bytes, mask);
+        return findInRange(start, end, bytes, mask);
     }
 
-
-    std::vector<uintptr_t> findHexAll(const KittyMemory::ProcMap& map, std::string hex, const char *mask) 
+    std::vector<uintptr_t> findHexAll(const uintptr_t start, const uintptr_t end, std::string hex, const std::string& mask)
     {
         std::vector<uintptr_t> list;
         
-        if (!map.isValid() || !mask || !KittyUtils::validateHexString(hex)) return list;
+        if (start >= end || mask.empty() || !KittyUtils::validateHexString(hex)) return list;
 
-        const size_t scan_size = strlen(mask);
+        const size_t scan_size = mask.length();
         if((hex.length() / 2) != scan_size) return list;
         
         std::vector<char> pattern(scan_size);
         KittyUtils::fromHex(hex, &pattern[0]);
 
-        list = findBytesAll(map, pattern.data(), mask);
+        list = findBytesAll(start, end, pattern.data(), mask);
         return list;
     }
 
-    uintptr_t findHexFirst(const KittyMemory::ProcMap& map, std::string hex, const char *mask) 
+    uintptr_t findHexFirst(const uintptr_t start, const uintptr_t end, std::string hex, const std::string& mask) 
     {        
-        if (!map.isValid() || !mask || !KittyUtils::validateHexString(hex)) return 0;
+        if (start >= end || mask.empty() || !KittyUtils::validateHexString(hex)) return 0;
 
-        const size_t scan_size = strlen(mask);
+        const size_t scan_size = mask.length();
         if((hex.length() / 2) != scan_size) return 0;
         
         std::vector<char> pattern(scan_size);
         KittyUtils::fromHex(hex, &pattern[0]);
 
-        return findBytesFirst(map, pattern.data(), mask);
+        return findBytesFirst(start, end, pattern.data(), mask);
     }
 
 
-    std::vector<uintptr_t> findDataAll(const KittyMemory::ProcMap &map, const void *data, size_t size)
+    std::vector<uintptr_t> findDataAll(const uintptr_t start, const uintptr_t end, const void *data, size_t size)
     {
         std::vector<uintptr_t> list;
 
-        if (!map.isValid() || !data || size < 1)
+        if (start >= end || !data || size < 1)
             return list;
 
         std::string mask(size, 'x');
 
-        list = findBytesAll(map, (const char *)data, mask.c_str());
+        list = findBytesAll(start, end, (const char *)data, mask);
         return list;
     }
 
-    uintptr_t findDataFirst(const KittyMemory::ProcMap &map, const void *data, size_t size)
+    uintptr_t findDataFirst(const uintptr_t start, const uintptr_t end, const void *data, size_t size)
     {
-        if (!map.isValid() || !data || size < 1)
+        if (start >= end || !data || size < 1)
             return 0;
 
         std::string mask(size, 'x');
 
-        return findBytesFirst(map, (const char *)data, mask.c_str());
+        return findBytesFirst(start, end, (const char *)data, mask);
     }
 
     RegisterNativeFn findRegisterNativeFn(const std::vector<KittyMemory::ProcMap> &maps, const std::string &name)
@@ -139,7 +138,7 @@ namespace KittyScanner
         
         for (auto &it : maps)  {
             if (it.is_rx) {
-                string_loc = KittyScanner::findDataFirst(it, name.data(), name.length());
+                string_loc = KittyScanner::findDataFirst(it.startAddress, it.endAddress, name.data(), name.length());
                 if (string_loc) break;
             }
         }
@@ -153,7 +152,7 @@ namespace KittyScanner
 
         for (auto &it : maps) {
             if (it.is_rw) {
-                string_xref = KittyScanner::findDataFirst(it, &string_loc, sizeof(uintptr_t));
+                string_xref = KittyScanner::findDataFirst(it.startAddress, it.endAddress, &string_loc, sizeof(uintptr_t));
                 if (!string_xref) continue;
 
                 KITTY_LOGI("string at (%p) referenced at %p", (void *)string_loc, (void *)string_xref);

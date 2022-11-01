@@ -103,28 +103,28 @@ void *test_thread(void *) {
 
     
     // scan with direct bytes & get one result
-    found_at = KittyScanner::findBytesFirst(g_il2cppBaseMap, "\x33\x44\x55\x66\x00\x77\x88\x00\x99", "xxxx??x?x");
+    found_at = KittyScanner::findBytesFirst(g_il2cppBaseMap.startAddress, g_il2cppBaseMap.endAddress, "\x33\x44\x55\x66\x00\x77\x88\x00\x99", "xxxx??x?x");
     KITTY_LOGI("found bytes at: %p", (void*)found_at);
     // scan with direct bytes & get all results
-    found_at_list = KittyScanner::findBytesAll(g_il2cppBaseMap, "\x33\x44\x55\x66\x00\x77\x88\x00\x99", "xxxx??x?x");
+    found_at_list = KittyScanner::findBytesAll(g_il2cppBaseMap.startAddress, g_il2cppBaseMap.endAddress, "\x33\x44\x55\x66\x00\x77\x88\x00\x99", "xxxx??x?x");
     KITTY_LOGI("found bytes results: %zu", found_at_list.size());
 
 
     // scan with hex & get one result
-    found_at = KittyScanner::findHexFirst(g_il2cppBaseMap, "33 44 55 66 00 77 88 00 99", "xxxx??x?x");
+    found_at = KittyScanner::findHexFirst(g_il2cppBaseMap.startAddress, g_il2cppBaseMap.endAddress, "33 44 55 66 00 77 88 00 99", "xxxx??x?x");
     KITTY_LOGI("found hex at: %p", (void*)found_at);
     // scan with hex & get all results
-    found_at_list = KittyScanner::findHexAll(g_il2cppBaseMap, "33 44 55 66 00 77 88 00 99", "xxxx??x?x");
+    found_at_list = KittyScanner::findHexAll(g_il2cppBaseMap.startAddress, g_il2cppBaseMap.endAddress, "33 44 55 66 00 77 88 00 99", "xxxx??x?x");
     KITTY_LOGI("found hex results: %zu", found_at_list.size());
 
 
     // scan with data type & get one result
     uint32_t data = 0x99887766;
-    found_at = KittyScanner::findDataFirst(g_il2cppBaseMap, &data, sizeof(data));
+    found_at = KittyScanner::findDataFirst(g_il2cppBaseMap.startAddress, g_il2cppBaseMap.endAddress, &data, sizeof(data));
     KITTY_LOGI("found data at: %p", (void*)found_at);
 
     // scan with data type & get all results
-    found_at_list = KittyScanner::findDataAll(g_il2cppBaseMap, &data, sizeof(data));
+    found_at_list = KittyScanner::findDataAll(g_il2cppBaseMap.startAddress, g_il2cppBaseMap.endAddress, &data, sizeof(data));
     KITTY_LOGI("found data results: %zu", found_at_list.size());
 
 

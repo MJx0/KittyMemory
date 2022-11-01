@@ -291,17 +291,24 @@ namespace KittyMemory {
         return map;
     }
 
-    ProcMap getLibraryBaseMap(const std::vector<ProcMap>& maps)
+    ProcMap getLibraryBaseMap(const std::vector<ProcMap> &maps)
     {
-        if(maps.empty()) return {};
+        ProcMap retMap{};
 
-        ProcMap retMap = maps[0];
-        if(retMap.is_rx && retMap.is_private) return retMap;
-        // find the first map with r-xp, sometimes r--p map is found first.
-        for (auto &curr_map: maps) {
-            if(retMap.isValid() && curr_map.is_rx && retMap.is_private) {
-                retMap = curr_map;
-                break;
+        if (maps.empty())
+            return retMap;   
+        
+        for (auto &it : maps)
+        {
+            if (!it.isValid()) continue;
+
+            std::vector<char> buffer(4);
+            memcpy(&buffer[0], (const void *)it.startAddress, 4);
+            if (memcmp(buffer.data(), "\177ELF", 4) == 0)
+            {
+                retMap = it;
+                // sometimes both r--p and r-xp could have a valid elf header,
+                // don't break here because we need the last map with a valid elf header.
             }
         }
         return retMap;
