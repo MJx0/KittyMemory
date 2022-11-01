@@ -300,11 +300,9 @@ namespace KittyMemory {
         
         for (auto &it : maps)
         {
-            if (!it.isValid()) continue;
+            if (!it.isValid() || it.writeable || !it.is_private) continue;
 
-            std::vector<char> buffer(4);
-            memcpy(&buffer[0], (const void *)it.startAddress, 4);
-            if (memcmp(buffer.data(), "\177ELF", 4) == 0)
+            if (memcmp((const void *)it.startAddress, "\177ELF", 4) == 0)
             {
                 retMap = it;
                 // sometimes both r--p and r-xp could have a valid elf header,
