@@ -68,45 +68,47 @@ MemoryPatch::MemoryPatch(const char *fileName, uintptr_t address,
   KittyMemory::memRead(&_orig_code[0], reinterpret_cast<const void *>(_address), patch_size);
 }
 
-MemoryPatch MemoryPatch::createWithHex(const char *fileName, uintptr_t address, std::string hex)
+MemoryPatch MemoryPatch::createWithHex(const char *fileName, uintptr_t address, const std::string &hex)
 {
   MemoryPatch patch;
 
-  if (address == 0 || !KittyUtils::validateHexString(hex))
+  std::string tmp_hex = hex;
+  if (address == 0 || !KittyUtils::validateHexString(tmp_hex))
     return patch;
 
   patch._address = KittyMemory::getAbsoluteAddress(fileName, address);
   if (patch._address == 0)
     return patch;
 
-  patch._size = hex.length() / 2;
+  patch._size = tmp_hex.length() / 2;
 
   patch._orig_code.resize(patch._size);
   patch._patch_code.resize(patch._size);
 
   // initialize patch
-  KittyUtils::fromHex(hex, &patch._patch_code[0]);
+  KittyUtils::dataFromHex(tmp_hex, &patch._patch_code[0]);
 
   // backup current content
   KittyMemory::memRead(&patch._orig_code[0], reinterpret_cast<const void *>(patch._address), patch._size);
   return patch;
 }
 
-MemoryPatch MemoryPatch::createWithHex(uintptr_t absolute_address, std::string hex)
+MemoryPatch MemoryPatch::createWithHex(uintptr_t absolute_address, const std::string &hex)
 {
   MemoryPatch patch;
 
-  if (absolute_address == 0 || !KittyUtils::validateHexString(hex))
+  std::string tmp_hex = hex;
+  if (absolute_address == 0 || !KittyUtils::validateHexString(tmp_hex))
     return patch;
 
   patch._address = absolute_address;
-  patch._size = hex.length() / 2;
+  patch._size = tmp_hex.length() / 2;
 
   patch._orig_code.resize(patch._size);
   patch._patch_code.resize(patch._size);
 
   // initialize patch
-  KittyUtils::fromHex(hex, &patch._patch_code[0]);
+  KittyUtils::dataFromHex(tmp_hex, &patch._patch_code[0]);
 
   // backup current content
   KittyMemory::memRead(&patch._orig_code[0], reinterpret_cast<const void *>(patch._address), patch._size);
@@ -146,19 +148,19 @@ std::string MemoryPatch::get_CurrBytes() const
 {
   if (!isValid()) return "";
   
-  return KittyMemory::read2HexStr(reinterpret_cast<const void *>(_address), _size);
+  return KittyUtils::data2Hex(reinterpret_cast<const void *>(_address), _size);
 }
 
 std::string MemoryPatch::get_OrigBytes() const
 {
   if (!isValid()) return "";
   
-  return KittyMemory::read2HexStr(_orig_code.data(), _orig_code.size());
+  return KittyUtils::data2Hex( _orig_code.data(), _orig_code.size());
 }
 
 std::string MemoryPatch::get_PatchBytes() const
 {
   if (!isValid()) return "";
   
-  return KittyMemory::read2HexStr(_patch_code.data(), _patch_code.size());
+  return KittyUtils::data2Hex(_patch_code.data(), _patch_code.size());
 }

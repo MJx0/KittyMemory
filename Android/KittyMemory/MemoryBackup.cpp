@@ -5,6 +5,7 @@
 //
 
 #include "MemoryBackup.h"
+#include "KittyUtils.h"
 
 
 MemoryBackup::MemoryBackup()
@@ -86,12 +87,12 @@ std::string MemoryBackup::get_CurrBytes() const
 {
   if (!isValid()) return "";
   
-  return KittyMemory::read2HexStr(reinterpret_cast<const void *>(_address), _size);
+  return KittyUtils::data2Hex(reinterpret_cast<const void *>(_address), _size);
 }
 
 std::string MemoryBackup::get_OrigBytes() const
 {
   if (!isValid()) return "";
   
-  return KittyMemory::read2HexStr(_orig_code.data(), _orig_code.size());
+  return KittyUtils::data2Hex(_orig_code.data(), _orig_code.size());
 }

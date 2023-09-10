@@ -2,13 +2,8 @@
 
 #import <pthread.h>
 
-#import "../KittyMemory/KittyMemory.hpp"
-#import "../KittyMemory/MemoryPatch.hpp"
-#import "../KittyMemory/writeData.hpp"
-#import "../KittyMemory/KittyScanner.hpp"
-#import "../KittyMemory/KittyUtils.hpp"
+#import "../KittyMemory/KittyInclude.hpp"
 
-using KittyMemory::MemoryFileInfo;
 
 #define ARM64_RET_TRUE "\x20\x00\x80\xD2\xC0\x03\x5F\xD6"
 
@@ -32,15 +27,21 @@ void *test_thread(void *)
     NSLog(@"=============== MEMORY PATCH ===============");
 
     // pass NULL as fileName for base executable
-    gPatches.canShowInMinimap = MemoryPatch(NULL,
+    gPatches.canShowInMinimap = MemoryPatch(nullptr,
+                               /* relative address */ 0x1019C1F20,
+                               /* patch bytes */ ARM64_RET_TRUE,
+                               /* patch bytes length */ 8);
+
+    // lib name or framework
+    gPatches.canShowInMinimap = MemoryPatch("UnityFramework",
                                /* relative address */ 0x1019C1F20,
                                /* patch bytes */ ARM64_RET_TRUE,
                                /* patch bytes length */ 8);
 
     // also possible with hex
     // spaces in hex string are fine too
-    gPatches.canShowInMinimap = MemoryPatch::createWithHex(NULL, 0x1019C1F20, "200080D2C0035FD6");
-    gPatches.canShowInMinimap = MemoryPatch::createWithHex(NULL, 0x1019C1F20, "20 00 80 D2 C0 03 5F D6");
+    gPatches.canShowInMinimap = MemoryPatch::createWithHex(nullptr, 0x1019C1F20, "200080D2C0035FD6");
+    gPatches.canShowInMinimap = MemoryPatch::createWithHex("UnityFramework", 0x1019C1F20, "20 00 80 D2 C0 03 5F D6");
 
     // for framework
     //gPatches.canShowInMinimap = MemoryPatch::createWithHex("Framework name", 0x1019C1F20, "20 00 80 D2 C0 03 5F D6");
@@ -74,13 +75,13 @@ void *test_thread(void *)
     // writedata alternative, check KittyMemory/writeData.hpp
 
     // write 64 bit integer ( 8 bytes )
-    if (writeData64(NULL, 0x1019C1F20, 0x200080D2C0035FD6))
+    if (writeData64(nullptr, 0x1019C1F20, 0x200080D2C0035FD6))
     {
         NSLog(@"get_CanShowOnMinimap has been modified successfully");
     }
 
     // or as 32 bit integer ( 4 bytes )
-    if (writeData32(NULL, 0x1019C1F20, 0x200080D2) && writeData32(NULL, 0x1019C1F20 + 4, 0xC0035FD6))
+    if (writeData32(nullptr, 0x1019C1F20, 0x200080D2) && writeData32(nullptr, 0x1019C1F20 + 4, 0xC0035FD6))
     {
         NSLog(@"get_CanShowOnMinimap has been modified successfully");
     }

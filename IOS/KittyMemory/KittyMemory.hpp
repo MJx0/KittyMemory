@@ -73,11 +73,6 @@ namespace KittyMemory
      */
     Memory_Status memRead(void *buffer, const void *addr, size_t len);
 
-    /*
-     * Reads an address content and returns hex string
-     */
-    std::string read2HexStr(const void *address, size_t len);
-
     kern_return_t getPageInfo(void *page_start, vm_region_submap_short_info_64 *outInfo);
 
     /*

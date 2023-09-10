@@ -44,13 +44,13 @@ namespace KittyMemory
     */
     Memory_Status memWrite(void *address, const void *buffer, size_t len)
     {
-        if (address == NULL)
+        if (!address)
             return INV_ADDR;
 
-        if (buffer == NULL)
+        if (!buffer)
             return INV_BUF;
 
-        if (len < 1 || len > INT_MAX)
+        if (!len)
             return INV_LEN;
 
         void *page_start = reinterpret_cast<void *>(_PAGE_START_OF_(address));
@@ -63,7 +63,7 @@ namespace KittyMemory
 
         if (page_info.protection & VM_PROT_WRITE)
         {
-            if (memcpy(address, buffer, len) != NULL)
+            if (memcpy(address, buffer, len) != nullptr)
                 return SUCCESS;
             else
                 return FAILED;
@@ -75,7 +75,7 @@ namespace KittyMemory
 
         // create new map, copy our code to it then remap it over target map
 
-        void *new_map = mmap(NULL, page_len, _PROT_RW_, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
+        void *new_map = mmap(nullptr, page_len, _PROT_RW_, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
         if (!new_map) return INV_MAP;
 
         task_t self_task = mach_task_self();
@@ -88,7 +88,7 @@ namespace KittyMemory
         }
 
         void *dst = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(new_map) + reinterpret_cast<uintptr_t>(page_offset));
-        if (memcpy(dst, buffer, len) == NULL || mprotect(new_map, page_len, _PROT_RX_) == -1)
+        if (memcpy(dst, buffer, len) == nullptr || mprotect(new_map, page_len, _PROT_RX_) == -1)
         {
             munmap(new_map, page_len);
             return FAILED;
@@ -116,24 +116,12 @@ namespace KittyMemory
         if (!buffer)
             return INV_BUF;
 
-        if (len < 1 || len > INT_MAX)
+        if (!len)
             return INV_LEN;
 
         memcpy(address, buffer, len);
 
         return SUCCESS;
-    }
-
-    std::string read2HexStr(const void *address, size_t len) 
-    {
-        std::string temp(len, ' ');
-        if (!memRead(&temp[0], address, len)) return "";
-
-        std::string ret(len * 2, ' ');
-        for (int i = 0; i < len; i++) {
-            sprintf(&ret[i * 2], "%02X", (unsigned char) temp[i]);
-        }
-        return ret;
     }
 
     MemoryFileInfo getBaseInfo()
@@ -191,7 +179,7 @@ namespace KittyMemory
 
 }
 
-#ifndef _NO_SUBSTRATE_LINK
+#ifndef kNO_SUBSTRATE
 
 #include <substrate.h>
 
@@ -203,10 +191,12 @@ bool findMSHookMemory(void *dst, const void *src, size_t len)
     if (!checked)
     {
         MSImageRef image = MSGetImageByName("/usr/lib/libsubstrate.dylib");
+        if(!image) 
+            image = MSGetImageByName("/usr/lib/libellekit.dylib");
+
         if(image) 
-        {
             fnPtr = MSFindSymbol(image, "_MSHookMemory");
-        }
+
         checked = true;
     }
 

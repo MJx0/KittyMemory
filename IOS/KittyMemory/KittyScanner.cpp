@@ -105,7 +105,7 @@ namespace KittyScanner
         if((hex.length() / 2) != scan_size) return list;
         
         std::vector<char> bytes(scan_size);
-        KittyUtils::fromHex(hex, &bytes[0]);
+        KittyUtils::dataFromHex(hex, &bytes[0]);
 
         list = findBytesAll(header, segment, bytes.data(), mask);
         return list;
@@ -119,7 +119,7 @@ namespace KittyScanner
         if((hex.length() / 2) != scan_size) return 0;
         
         std::vector<char> bytes(scan_size);
-        KittyUtils::fromHex(hex, &bytes[0]);
+        KittyUtils::dataFromHex(hex, &bytes[0]);
 
         return findBytesFirst(header, segment, bytes.data(), mask);
     }

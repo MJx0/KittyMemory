@@ -1,16 +1,33 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
 
+#include <elf.h>
+#ifdef __LP64__
+#define ELFCLASS_BITS_ 64
+#define ELF_EICLASS_ 2
+#define ElfW_(x) Elf64_##x
+#define ELFW_(x) ELF64_##x
+#else
+#define ELFCLASS_BITS_ 32
+#define ELF_EICLASS_ 1
+#define ElfW_(x) Elf32_##x
+#define ELFW_(x) ELF32_##x
+#endif
+
 namespace KittyUtils {
 
+    std::string fileNameFromPath(const std::string &filePath);
+
     void trim_string(std::string &str);
-    bool validateHexString(std::string &xstr);
-    void toHex(void *const data, const size_t dataLength, std::string &dest);
-    void fromHex(const std::string &in, void *const data);
+    bool validateHexString(std::string &hex);
+
+    std::string data2Hex(const void *data, const size_t dataLength);
+    void dataFromHex(const std::string &in, void *data);
 
     template <size_t rowSize=8, bool showASCII=true>
     std::string HexDump(const void *address, size_t len)
@@ -43,7 +60,7 @@ namespace KittyUtils {
             {
                 ss << " ";
 
-                for (size_t j = 0; (j < rowSize) && ((i + j) < len); j++)
+                for (j = 0; (j < rowSize) && ((i + j) < len); j++)
                 {
                     if (std::isprint(data[i + j]))
                         ss << data[i + j];
@@ -56,6 +73,26 @@ namespace KittyUtils {
         }
 
         return ss.str();
+    }
+
+    namespace Elf {
+        namespace ElfHash {
+            const ElfW_(Sym) *LookupByName(uintptr_t elfhash,
+                                           uintptr_t symtab,
+                                           uintptr_t strtab,
+                                           size_t syment,
+                                           size_t strsz,
+                                           const char *symbol_name);
+        }
+
+        namespace GnuHash {
+            const ElfW_(Sym) *LookupByName(uintptr_t gnuhash,
+                                           uintptr_t symtab,
+                                           uintptr_t strtab,
+                                           size_t syment,
+                                           size_t strsz,
+                                           const char *symbol_name);
+        }
     }
 
 }

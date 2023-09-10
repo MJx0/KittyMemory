@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "KittyMemory.hpp"
+#include "KittyUtils.hpp"
 
 class MemoryBackup
 {

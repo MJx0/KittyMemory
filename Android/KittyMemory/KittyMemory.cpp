@@ -5,8 +5,9 @@
 //
 
 #include "KittyMemory.h"
+#include "KittyUtils.h"
 #include <map>
-#include <android/log.h>
+#include <dlfcn.h>
 
 namespace KittyMemory {
 
@@ -15,13 +16,13 @@ namespace KittyMemory {
         uintptr_t pageStart = _PAGE_START_OF_(address);
         uintptr_t pageLen = _PAGE_LEN_OF_(address, length);
         int ret = mprotect(reinterpret_cast<void *>(pageStart), pageLen, protection);
-        KITTY_LOGI("mprotect(%p, %zu, %d) = %d", address, length, protection, ret);
+        KITTY_LOGD("mprotect(%p, %zu, %d) = %d", address, length, protection, ret);
         return ret;
     }
 
     bool memWrite(void *address, const void *buffer, size_t len)
     {
-        KITTY_LOGI("memWrite(%p, %p, %zu)", address, buffer, len);
+        KITTY_LOGD("memWrite(%p, %p, %zu)", address, buffer, len);
 
         if (!address) {
             KITTY_LOGE("memWrite err address (%p) is null", address);
@@ -33,8 +34,8 @@ namespace KittyMemory {
             return false;
         }
 
-        if (len < 1 || len > INT_MAX) {
-            KITTY_LOGE("memWrite err invalid len (%zu) < 1 || > INT_MAX", len);
+        if (!len) {
+            KITTY_LOGE("memWrite err invalid len");
             return false;
         }
 
@@ -68,7 +69,7 @@ namespace KittyMemory {
 
     bool memRead(void *address, const void *buffer, size_t len)
     {
-        KITTY_LOGI("memRead(%p, %p, %zu)", address, buffer, len);
+        KITTY_LOGD("memRead(%p, %p, %zu)", address, buffer, len);
 
         if (!address) {
             KITTY_LOGE("memRead err address (%p) is null", address);
@@ -80,8 +81,8 @@ namespace KittyMemory {
             return false;
         }
 
-        if (len < 1 || len > INT_MAX) {
-            KITTY_LOGE("memRead err invalid len (%zu) < 1 || > INT_MAX", len);
+        if (!len) {
+            KITTY_LOGE("memWrite err invalid len");
             return false;
         }
 
@@ -90,66 +91,70 @@ namespace KittyMemory {
         return true;
     }
 
-    std::string read2HexStr(const void *address, size_t len)
+    std::string getProcessName()
     {
-        std::string temp(len, ' ');
-        if (!memRead(&temp[0], address, len)) return "";
-
-        std::string ret(len * 2, ' ');
-        for (int i = 0; i < len; i++) {
-            sprintf(&ret[i * 2], "%02X", (unsigned char) temp[i]);
+        const char *file = "/proc/self/cmdline";
+        char cmdline[128] = {0};
+        FILE *fp = fopen(file, "r");
+        if (!fp) {
+            KITTY_LOGE("Couldn't open file %s.", file);
+            return "";
         }
-        return ret;
+        fgets(cmdline, sizeof(cmdline), fp);
+        fclose(fp);
+        return cmdline;
     }
 
     std::vector<ProcMap> getAllMaps()
     {
         std::vector<ProcMap> retMaps;
+        const char *file = "/proc/self/maps";
         char line[512] = {0};
 
-        FILE *fp = fopen("/proc/self/maps", "r");
-        if (fp) {
-            while (fgets(line, sizeof(line), fp)) {
-                ProcMap map;
-
-                char perms[5] = {0}, dev[11] = {0}, pathname[256] = {0};
-                // parse a line in maps file
-                // (format) startAddress-endAddress perms offset dev inode pathname
-                sscanf(line, "%llx-%llx %s %llx %s %lu %s",
-                       &map.startAddress, &map.endAddress,
-                       perms, &map.offset, dev, &map.inode, pathname);
-
-                map.length = map.endAddress - map.startAddress;
-                map.dev = dev;
-                map.pathname = pathname;
-
-                if (perms[0] == 'r')
-                {
-                    map.protection |= PROT_READ;
-                    map.readable = true;
-                }
-                if (perms[1] == 'w')
-                {
-                    map.protection |= PROT_WRITE;
-                    map.writeable = true;
-                }
-                if (perms[2] == 'x')
-                {
-                    map.protection |= PROT_EXEC;
-                    map.executable = true;
-                }
-
-                map.is_private = (perms[3] == 'p');
-                map.is_shared = (perms[3] == 's');
-
-                map.is_rx = (strncmp(perms, "r-x", 3) == 0);
-                map.is_rw = (strncmp(perms, "rw-", 3) == 0);
-                map.is_ro = (strncmp(perms, "r--", 3) == 0);
-
-                retMaps.push_back(map);
-            }
-            fclose(fp);
+        FILE *fp = fopen(file, "r");
+        if (!fp) {
+            KITTY_LOGE("Couldn't open file %s.", file);
+            return retMaps;
         }
+
+        while (fgets(line, sizeof(line), fp)) {
+            ProcMap map;
+
+            char perms[5] = {0}, dev[11] = {0}, pathname[256] = {0};
+            // parse a line in maps file
+            // (format) startAddress-endAddress perms offset dev inode pathname
+            sscanf(line, "%llx-%llx %s %llx %s %lu %s",
+                   &map.startAddress, &map.endAddress,
+                   perms, &map.offset, dev, &map.inode, pathname);
+
+            map.length = map.endAddress - map.startAddress;
+            map.dev = dev;
+            map.pathname = pathname;
+
+            if (perms[0] == 'r') {
+                map.protection |= PROT_READ;
+                map.readable = true;
+            }
+            if (perms[1] == 'w') {
+                map.protection |= PROT_WRITE;
+                map.writeable = true;
+            }
+            if (perms[2] == 'x') {
+                map.protection |= PROT_EXEC;
+                map.executable = true;
+            }
+
+            map.is_private = (perms[3] == 'p');
+            map.is_shared = (perms[3] == 's');
+
+            map.is_rx = (strncmp(perms, "r-x", 3) == 0);
+            map.is_rw = (strncmp(perms, "rw-", 3) == 0);
+            map.is_ro = (strncmp(perms, "r--", 3) == 0);
+
+            retMaps.push_back(map);
+        }
+
+        fclose(fp);
 
         if (retMaps.empty()) {
             KITTY_LOGE("getAllMaps err couldn't find any map");
@@ -161,160 +166,89 @@ namespace KittyMemory {
     {
         if (name.empty()) return {};
 
-        KITTY_LOGI("getMapsByName(%s)", name.c_str());
+        KITTY_LOGD("getMapsByName(%s)", name.c_str());
 
         std::vector<ProcMap> retMaps;
-        char line[512] = {0};
 
-        FILE *fp = fopen("/proc/self/maps", "r");
-        if (fp) {
-            while (fgets(line, sizeof(line), fp)) {
-                if (strstr(line, name.c_str())) {
-                    ProcMap map;
-
-                    char perms[5] = {0}, dev[11] = {0}, pathname[256] = {0};
-                    // parse a line in maps file
-                    // (format) startAddress-endAddress perms offset dev inode pathname
-                    sscanf(line, "%llx-%llx %s %llx %s %lu %s",
-                           &map.startAddress, &map.endAddress,
-                           perms, &map.offset, dev, &map.inode, pathname);
-
-                    map.length = map.endAddress - map.startAddress;
-                    map.dev = dev;
-                    map.pathname = pathname;
-
-                    if (perms[0] == 'r')
-                    {
-                        map.protection |= PROT_READ;
-                        map.readable = true;
-                    }
-                    if (perms[1] == 'w')
-                    {
-                        map.protection |= PROT_WRITE;
-                        map.writeable = true;
-                    }
-                    if (perms[2] == 'x')
-                    {
-                        map.protection |= PROT_EXEC;
-                        map.executable = true;
-                    }
-
-                    map.is_private = (perms[3] == 'p');
-                    map.is_shared = (perms[3] == 's');
-
-                    map.is_rx = (strncmp(perms, "r-x", 3) == 0);
-                    map.is_rw = (strncmp(perms, "rw-", 3) == 0);
-                    map.is_ro = (strncmp(perms, "r--", 3) == 0);
-
-                    retMaps.push_back(map);
-                    // KITTY_LOGI("getMapsByName [%llx-%llx %s %llx %s %lu %s]",
-                    // map.startAddress, map.endAddress, perms, map.offset,
-                    // map.dev.empty() ? "null" : map.dev.c_str(),
-                    // map.inode, map.pathname.empty() ? "null" : map.pathname.c_str());
-                }
+        auto maps = getAllMaps();
+        for(auto &it : maps) {
+            if (it.isValid() && !it.isUnknown() && strstr(it.pathname.c_str(), name.c_str())) {
+                retMaps.push_back(it);
             }
-            fclose(fp);
         }
 
-        if (retMaps.empty()) {
-            KITTY_LOGE("getMapsByName err couldn't find any map with name (%s)", name.c_str());
-        }
         return retMaps;
     }
 
     ProcMap getAddressMap(const void *address)
     {
-        KITTY_LOGI("getAddressMap(%p)", address);
+        KITTY_LOGD("getAddressMap(%p)", address);
 
         if (!address) return {};
 
-        ProcMap map;
-        char line[512] = {0};
-        unsigned long long startAddress = 0, endAddress = 0;
-
-        FILE *fp = fopen("/proc/self/maps", "r");
-        if (fp) {
-            while (fgets(line, sizeof(line), fp)) {
-                sscanf(line, "%llx-%llx", &startAddress, &endAddress);
-                if ((uintptr_t)address >= startAddress && (uintptr_t)address <= endAddress) {
-
-                    char perms[5] = {0}, dev[11] = {0}, pathname[256] = {0};
-                    // parse a line in maps file
-                    // (format) startAddress-endAddress perms offset dev inode pathname
-                    sscanf(line, "%*llx-%*llx %s %llx %s %lu %s",
-                           perms, &map.offset, dev, &map.inode, pathname);
-
-                    map.startAddress = startAddress;
-                    map.endAddress = endAddress;
-                    map.length = map.endAddress - map.startAddress;
-                    map.dev = dev;
-                    map.pathname = pathname;
-
-                    if (perms[0] == 'r')
-                    {
-                        map.protection |= PROT_READ;
-                        map.readable = true;
-                    }
-                    if (perms[1] == 'w')
-                    {
-                        map.protection |= PROT_WRITE;
-                        map.writeable = true;
-                    }
-                    if (perms[2] == 'x')
-                    {
-                        map.protection |= PROT_EXEC;
-                        map.executable = true;
-                    }
-
-                    map.is_private = (perms[3] == 'p');
-                    map.is_shared = (perms[3] == 's');
-
-                    map.is_rx = (strncmp(perms, "r-x", 3) == 0);
-                    map.is_rw = (strncmp(perms, "rw-", 3) == 0);
-                    map.is_ro = (strncmp(perms, "r--", 3) == 0);
-
-                    // KITTY_LOGI("Address (%p) map = (%llx-%llx %s %llx %s %lu %s)", address,
-                    // map.startAddress, map.endAddress, perms[0] == 0 ? "null" : perms,
-                    // map.offset, map.dev.empty() ? "null" : map.dev.c_str(),
-                    // map.inode, map.pathname.empty() ? "null" : map.pathname.c_str());
-
-                    break;
-                }
-            }
-            fclose(fp);
-        }
-
-        if (!map.isValid()) {
-            KITTY_LOGE("getAddressMap err couldn't find any map with address (%p)",
-                       address);
-        }
-        return map;
-    }
-
-    ProcMap getLibraryBaseMap(const std::vector<ProcMap> &maps)
-    {
         ProcMap retMap{};
 
-        if (maps.empty())
-            return retMap;   
-        
-        for (auto &it : maps)
-        {
-            if (!it.isValid() || it.writeable || !it.is_private) continue;
-
-            if (memcmp((const void *)it.startAddress, "\177ELF", 4) == 0)
-            {
+        auto maps = getAllMaps();
+        for(auto &it : maps) {
+            if (it.isValid() && (uintptr_t)address >= it.startAddress && (uintptr_t)address <= it.endAddress) {
                 retMap = it;
-                // sometimes both r--p and r-xp could have a valid elf header,
-                // don't break here because we need the last map with a valid elf header.
+                break;
             }
         }
+
         return retMap;
     }
 
-    ProcMap getLibraryBaseMap(const std::string& name)
+    ProcMap getBaseMapOf(const std::string& name)
     {
-        return getLibraryBaseMap(getMapsByName(name));
+        ProcMap retMap{};
+
+        if (name.empty())
+            return retMap;
+
+        bool isZippedInAPK = false;
+        auto maps = getMapsByName(name);
+        if (maps.empty())
+        {
+            // some apps use dlopen on zipped libraries like base.apk!/lib/xxx/libxxx.so
+            // so we'll search in app's base.apk maps too
+            maps = getMapsByName("==/base.apk");
+            if (maps.empty()) {
+                return retMap;
+            }
+            isZippedInAPK = true;
+        }
+
+        for (auto &it: maps) {
+            if (!it.isValid() || it.isUnknown() || !it.readable || it.writeable || !it.is_private) continue;
+            if (memcmp((const void *) it.startAddress, "\177ELF", 4) != 0) continue;
+
+            // skip dladdr check for linker/linker64
+            if (strstr(it.pathname.c_str(), "/system/bin/linker")) {
+                retMap = it;
+                break;
+            }
+
+            Dl_info info{};
+            int rt = dladdr((void *) it.startAddress, &info);
+            // check dli_fname and dli_fbase if NULL
+            if (rt == 0 || !info.dli_fname || !info.dli_fbase || it.startAddress != (uintptr_t) info.dli_fbase)
+                continue;
+
+            if (!isZippedInAPK) {
+                retMap = it;
+                break;
+            }
+
+            // if library is zipped inside base.apk, compare dli_fname and fix pathname
+            if (strstr(info.dli_fname, name.c_str())) {
+                retMap = it;
+                retMap.pathname = info.dli_fname;
+                break;
+            }
+        }
+
+        return retMap;
     }
 
 }

@@ -2,15 +2,7 @@
 
 #include <vector>
 
-#include <KittyMemory/KittyMemory.h>
-#include <KittyMemory/MemoryPatch.h>
-#include <KittyMemory/KittyScanner.h>
-#include <KittyMemory/KittyUtils.h>
-
-using KittyMemory::ProcMap;
-using KittyScanner::RegisterNativeFn;
-
-// define kITTYMEMORY_DEBUG in cpp flags for KITTY_LOGI & KITTY_LOGE outputs
+#include <KittyMemory/KittyInclude.h>
 
 
 // fancy struct for patches
@@ -24,14 +16,38 @@ using KittyScanner::RegisterNativeFn;
 
 ProcMap g_il2cppBaseMap;
 
-void *test_thread(void *) {
-    KITTY_LOGI("======================= LOADED ======================");
+void *test_thread(void *)
+{
+    std::string processName = KittyMemory::getProcessName();
+    KITTY_LOGI("Hello World: %s", processName.c_str());
+    KITTY_LOGI("======================================================");
+
+    sleep(1);
+
+    KITTY_LOGI("==================== SYMBOL LOOKUP ===================");
+
+    // symbol lookup by name
+    const char *lib_egl = KittyMemory::getMapsByName("/nb/libEGL.so").empty() ? "libEGL.so" : "/nb/libEGL.so";
+    uintptr_t p_eglSwapBuffers = KittyScanner::findSymbol(lib_egl, "eglSwapBuffers");
+    KITTY_LOGI("eglSwapBuffers = %p", (void*)p_eglSwapBuffers);
+
+    // symbol lookup by name in all loaded shared objects
+    auto v_eglSwapBuffers = KittyScanner::findSymbolAll("eglSwapBuffers");
+    for(auto &it : v_eglSwapBuffers) {
+        // first  = symbol address
+        // second = library pathname
+        KITTY_LOGI("Found %s at %p from %s", "eglSwapBuffers", (void *) it.first, it.second.c_str());
+    }
+
+
+    KITTY_LOGI("==================== GET LIB BASE ===================");
 
     // loop until our target library is found
     
     do {
         sleep(1);
-        g_il2cppBaseMap = KittyMemory::getLibraryBaseMap("libil2cpp.so");
+        // getBaseMapOf can also find lib base even if it was loaded from zipped base.apk
+        g_il2cppBaseMap = KittyMemory::getBaseMapOf("libil2cpp.so");
     } while (!g_il2cppBaseMap.isValid());
 
     KITTY_LOGI("il2cpp base: %p", (void*)(g_il2cppBaseMap.startAddress));
@@ -90,7 +106,7 @@ void *test_thread(void *) {
 
     RegisterNativeFn nativeRender = KittyScanner::findRegisterNativeFn(unityMaps, "nativeRender");
     if(nativeRender.isValid()) {
-        KITTY_LOGI("nativeInjectEvent = { %s, %s, %p }", nativeRender.name, nativeRender.signature, nativeRender.fnPtr);
+        KITTY_LOGI("nativeRender = { %s, %s, %p }", nativeRender.name, nativeRender.signature, nativeRender.fnPtr);
     }
 
 

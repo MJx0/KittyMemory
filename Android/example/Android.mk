@@ -4,17 +4,17 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := KittyMemory
 
-KittyMemoryPath = ../KittyMemory
+KITTYMEMORY_PATH = ../KittyMemory
 
-KITTYMEMORY_SRC = $(KittyMemoryPath)/KittyMemory.cpp \
-$(KittyMemoryPath)/MemoryPatch.cpp \
-$(KittyMemoryPath)/MemoryBackup.cpp \
-$(KittyMemoryPath)/KittyUtils.cpp \
-$(KittyMemoryPath)/KittyScanner.cpp \
-$(KittyMemoryPath)/KittyArm64.cpp
+KITTYMEMORY_SRC = $(KITTYMEMORY_PATH)/KittyMemory.cpp \
+$(KITTYMEMORY_PATH)/MemoryPatch.cpp \
+$(KITTYMEMORY_PATH)/MemoryBackup.cpp \
+$(KITTYMEMORY_PATH)/KittyUtils.cpp \
+$(KITTYMEMORY_PATH)/KittyScanner.cpp \
+$(KITTYMEMORY_PATH)/KittyArm64.cpp
 
 LOCAL_SRC_FILES := $(KITTYMEMORY_SRC) example.cpp
 
-LOCAL_C_INCLUDES += $(KittyMemoryPath)/../
+LOCAL_C_INCLUDES += $(KITTYMEMORY_PATH)/../
 
 include $(BUILD_SHARED_LIBRARY)

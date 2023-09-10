@@ -7,10 +7,13 @@
 
 namespace KittyUtils {
 
+    std::string fileNameFromPath(const std::string &filePath);
+
     void trim_string(std::string &str);
     bool validateHexString(std::string &xstr);
-    void toHex(void *const data, const size_t dataLength, std::string &dest);
-    void fromHex(const std::string &in, void *const data);
+    
+    std::string data2Hex(const void *data, const size_t dataLength);
+    void dataFromHex(const std::string &in, void *data);
 
     template <size_t rowSize=8, bool showASCII=true>
     std::string HexDump(const void *address, size_t len)
@@ -43,7 +46,7 @@ namespace KittyUtils {
             {
                 ss << " ";
 
-                for (size_t j = 0; (j < rowSize) && ((i + j) < len); j++)
+                for (j = 0; (j < rowSize) && ((i + j) < len); j++)
                 {
                     if (std::isprint(data[i + j]))
                         ss << data[i + j];

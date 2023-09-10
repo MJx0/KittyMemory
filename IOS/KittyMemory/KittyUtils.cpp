@@ -2,6 +2,15 @@
 
 namespace KittyUtils {
 
+    std::string fileNameFromPath(const std::string &filePath)
+    {
+        std::string filename;
+        const size_t last_slash_idx = filePath.find_last_of("/\\");
+        if (std::string::npos != last_slash_idx)
+            filename = filePath.substr(last_slash_idx + 1);
+        return filename;
+    }
+    
     void trim_string(std::string &str) 
     {
         // https://www.techiedelight.com/remove-whitespaces-string-cpp/
@@ -32,34 +41,31 @@ namespace KittyUtils {
 
     // https://tweex.net/post/c-anything-tofrom-a-hex-string/
 
-    // ------------------------------------------------------------------
-    /*!
+    /*
         Convert a block of data to a hex string
     */
-    void toHex(
-            void *const data,        //!< Data to convert
-            const size_t dataLength, //!< Length of the data to convert
-            std::string &dest        //!< Destination string
+    std::string data2Hex(
+            const void *data,        //!< Data to convert
+            const size_t dataLength //!< Length of the data to convert
     ) {
-        unsigned char *byteData = reinterpret_cast<unsigned char *>(data);
+        const auto *byteData = reinterpret_cast<const unsigned char *>(data);
         std::stringstream hexStringStream;
 
         hexStringStream << std::hex << std::setfill('0');
         for (size_t index = 0; index < dataLength; ++index)
             hexStringStream << std::setw(2) << static_cast<int>(byteData[index]);
-        dest = hexStringStream.str();
+        return hexStringStream.str();
     }
 
-    // ------------------------------------------------------------------
-    /*!
+    /*
         Convert a hex string to a block of data
     */
-    void fromHex(
+    void dataFromHex(
             const std::string &in, //!< Input hex string
-            void *const data       //!< Data store
+            void *data       //!< Data store
     ) {
         size_t length = in.length();
-        unsigned char *byteData = reinterpret_cast<unsigned char *>(data);
+        auto *byteData = reinterpret_cast<unsigned char *>(data);
 
         std::stringstream hexStringStream;
         hexStringStream >> std::hex;

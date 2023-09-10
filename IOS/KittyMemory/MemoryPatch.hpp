@@ -40,8 +40,8 @@ public:
     /*
      * compatible hex format (0xffff & ffff & ff ff)
      */
-    static MemoryPatch createWithHex(const char *fileName, uintptr_t address, std::string hex);
-    static MemoryPatch createWithHex(uintptr_t absolute_address, std::string hex);
+    static MemoryPatch createWithHex(const char *fileName, uintptr_t address, const std::string &hex);
+    static MemoryPatch createWithHex(uintptr_t absolute_address, const std::string &hex);
 
     /*
      * Validate patch

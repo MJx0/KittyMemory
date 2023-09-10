@@ -19,14 +19,16 @@
 #define _PAGE_LEN_OF_(x, len) (_PAGE_END_OF_(x, len) - _PAGE_START_OF_(x) + _SYS_PAGE_SIZE_)
 #define _PAGE_OFFSET_OF_(x) ((uintptr_t)x - _PAGE_START_OF_(x))
 
-#ifdef kITTYMEMORY_DEBUG
 #include <android/log.h>
-#define KITTY_LOGI(...) ((void)__android_log_print(4, "KittyMemory", __VA_ARGS__))
-#define KITTY_LOGE(...) ((void)__android_log_print(6, "KittyMemory", __VA_ARGS__))
+
+#ifdef kITTYMEMORY_DEBUG
+#define KITTY_LOGD(...) ((void)__android_log_print(ANDROID_LOG_DEBUG, "KittyMemory", __VA_ARGS__))
 #else
-#define KITTY_LOGI(...)
-#define KITTY_LOGE(...)
+#define KITTY_LOGD(...)
 #endif
+
+#define KITTY_LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "KittyMemory", __VA_ARGS__))
+#define KITTY_LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR, "KittyMemory", __VA_ARGS__))
 
 namespace KittyMemory
 {
@@ -44,8 +46,8 @@ namespace KittyMemory
         std::string pathname;
 
         ProcMap() : startAddress(0), endAddress(0), length(0), protection(0),
+		            readable(false), writeable(false), executable(false),
                     is_private(false), is_shared(false),
-                    readable(false), writeable(false), executable(false),
                     is_ro(false), is_rw(false), is_rx(false),
                     offset(0), inode(0) {}
 
@@ -69,17 +71,17 @@ namespace KittyMemory
     bool memRead(void *buffer, const void *address, size_t len);
 
     /*
-     * Reads an address content and returns hex string
+     * /proc/self/cmdline
      */
-    std::string read2HexStr(const void *address, size_t len);
+    std::string getProcessName();
 
     /*
-     * Gets info of all maps in self process
+     * Gets info of all maps in current process
      */
     std::vector<ProcMap> getAllMaps();
 
     /*
-     * Gets info of all maps which contain "name" in self process
+     * Gets info of all maps which contain "name" in current process
      */
     std::vector<ProcMap> getMapsByName(const std::string& name);
 
@@ -89,8 +91,7 @@ namespace KittyMemory
     ProcMap getAddressMap(const void *address);
 
     /*
-     * Gets first r-xp map of a library
+     * Gets the base map of a loaded shared object
      */
-    ProcMap getLibraryBaseMap(const std::vector<ProcMap>& maps);
-    ProcMap getLibraryBaseMap(const std::string& name);
+    ProcMap getBaseMapOf(const std::string& name);
 }

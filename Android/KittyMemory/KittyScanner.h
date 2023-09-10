@@ -3,6 +3,7 @@
 #include <string>
 #include <cstdint>
 #include <vector>
+#include <utility>
 
 #include "KittyMemory.h"
 
@@ -37,4 +38,15 @@ namespace KittyScanner
     // search for string "name" references to find the JNINativeMethod array
     RegisterNativeFn findRegisterNativeFn(const std::vector<KittyMemory::ProcMap> &maps, const std::string &name);
 
+    // lookup symbol name in a loaded shared object
+    // returns the absolute address of the symbol
+    uintptr_t findSymbol(const KittyMemory::ProcMap &baseMap, const std::string &symbol_name);
+
+    // lookup symbol name in a loaded shared object
+    // returns the absolute address of the symbol
+    uintptr_t findSymbol(const std::string &lib, const std::string &symbol_name);
+
+    // lookup symbol name in all loaded shared objects
+    // returns a vector of symbol absolute address and the library pathname where the symbol was found in
+    std::vector<std::pair<uintptr_t, std::string>> findSymbolAll(const std::string &symbol_name);
 }
