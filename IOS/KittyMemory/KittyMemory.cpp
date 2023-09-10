@@ -128,10 +128,21 @@ namespace KittyMemory
     {
         MemoryFileInfo _info;
 
-        _info.index = 0,
-        _info.header = _dyld_get_image_header(0);
-        _info.name = _dyld_get_image_name(0);
-        _info.address = _dyld_get_image_vmaddr_slide(0);
+        const uint32_t imageCount = _dyld_image_count();
+
+        for (uint32_t i = 0; i < imageCount; i++)
+        {
+            const mach_header *hdr = _dyld_get_image_header(i);
+            if (!hdr || hdr->filetype != MH_EXECUTE) continue;
+
+            // first executable
+            _info.index = i;
+            _info.header = _dyld_get_image_header(i);
+            _info.name = _dyld_get_image_name(i);
+            _info.address = _dyld_get_image_vmaddr_slide(i);
+
+            break;
+        }
 
         return _info;
     }
