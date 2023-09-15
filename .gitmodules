@@ -1,6 +1,0 @@
-[submodule "Android"]
-	path = Android
-	url = https://github.com/MJx0/KittyMemory/Android.git
-[submodule "IOS"]
-	path = IOS
-	url = https://github.com/MJx0/KittyMemory/IOS.git
