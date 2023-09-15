@@ -25,6 +25,10 @@
 #define _PAGE_LEN_OF_(x, len) (_PAGE_END_OF_(x, len) - _PAGE_START_OF_(x) + _SYS_PAGE_SIZE_)
 #define _PAGE_OFFSET_OF_(x) ((uintptr_t)x - _PAGE_START_OF_(x))
 
+#define _PROT_RWX_ (PROT_READ | PROT_WRITE | PROT_EXEC)
+#define _PROT_RX_ (PROT_READ | PROT_EXEC)
+#define _PROT_RW_ (PROT_READ | PROT_WRITE)
+
 #define KITTY_LOG_TAG "KittyMemory"
 
 #ifdef __ANDROID__
