@@ -105,7 +105,11 @@ namespace KittyScanner
      * @return the absolute address of the symbol
      */
     uintptr_t findSymbol(const KittyMemory::ProcMap &baseMap, const std::string &symbol_name);
-
+    /**
+     * lookup symbol name in a loaded shared object
+     * @return the absolute address of the symbol
+     */
+    uintptr_t findSymbol(uintptr_t libBase, const std::string &symbol_name);
     /**
      * lookup symbol name in a loaded shared object
      * @return the absolute address of the symbol

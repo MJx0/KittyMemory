@@ -94,12 +94,12 @@ namespace KittyScanner
     }
 
     uintptr_t findHexFirst(const uintptr_t start, const uintptr_t end, std::string hex, const std::string& mask) 
-    {        
+    {
         if (start >= end || mask.empty() || !KittyUtils::validateHexString(hex)) return 0;
 
         const size_t scan_size = mask.length();
         if((hex.length() / 2) != scan_size) return 0;
-        
+
         std::vector<char> pattern(scan_size);
         KittyUtils::dataFromHex(hex, &pattern[0]);
 
@@ -141,7 +141,7 @@ namespace KittyScanner
             return fn;
         
         for (auto &it : maps) {
-            if (it.is_rx) {
+            if (it.isValidELF()) {
                 string_loc = KittyScanner::findDataFirst(it.startAddress, it.endAddress, name.data(), name.length());
                 if (string_loc) break;
             }
@@ -177,23 +177,17 @@ namespace KittyScanner
 #define DT_GNU_HASH 0x6ffffef5
 #endif
 
-    uintptr_t findSymbol(const KittyMemory::ProcMap &baseMap, const std::string &symbol_name) {
-        if (!baseMap.isValid() || !baseMap.readable) {
-            KITTY_LOGE("findSymbol: map is invalid [%p - %p] \"%s\".",
+    uintptr_t findSymbol(const KittyMemory::ProcMap &baseMap, const std::string &symbol_name)
+    {
+        if (!baseMap.isValidELF()) {
+            KITTY_LOGE("findSymbol: map is not a valid ELF [%p - %p] \"%s\".",
                        (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
             return 0;
         }
 
         auto ident = reinterpret_cast<unsigned char *>(baseMap.startAddress);
-
-        if (memcmp(ident, "\177ELF", 4) != 0) {
-            KITTY_LOGE("findSymbol: Bad elf [%p - %p] \"%s\".",
-                       (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
-            return 0;
-        }
-
         if (ident[EI_CLASS] != ELF_EICLASS_) {
-            KITTY_LOGE("findSymbol: Elf class mismatch [%p - %p] \"%s\".",
+            KITTY_LOGE("findSymbol: ELF class mismatch [%p - %p] \"%s\".",
                        (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
             return 0;
         }
@@ -254,17 +248,18 @@ namespace KittyScanner
         }
 
         // Check that we have all program headers required for dynamic linking
-        if (!loads || !strtab || !symtab || (!elf_hash && !gnu_hash)) {
+        if (!loads || !strtab || !symtab) {
             KITTY_LOGE("findSymbol: failed to require all program headers for dynamic linking.");
-            KITTY_LOGE("findSymbol: loads: %d | strtab=%p | symtab=%p | elf_hash=%p | gnu_hash=%p",
-                       loads, (void *) strtab, (void *) symtab, (void *) elf_hash, (void *) gnu_hash);
-            KITTY_LOGE("[%p - %p] \"%s\".",
-                    (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
+            KITTY_LOGE("findSymbol: loads: %d | strtab=%p | symtab=%p", loads, (void *) strtab, (void *) symtab);
+            KITTY_LOGE("[%p - %p] \"%s\".", (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
             return 0;
         }
 
-        auto fix_table_address = [&](uintptr_t &table) {
-            if (table && table < load_bias) table += load_bias;
+        auto fix_table_address = [&](uintptr_t &table_addr) {
+            if (table_addr && table_addr < load_bias) table_addr += load_bias;
+        };
+        auto get_sym_address = [&](const ElfW_(Sym) *sym_ent) -> uintptr_t {
+            return ((ehdr->e_type != ET_EXEC) ? load_bias + sym_ent->st_value : sym_ent->st_value);
         };
 
         fix_table_address(strtab);
@@ -276,33 +271,44 @@ namespace KittyScanner
         if (gnu_hash) {
             const auto *sym = KittyUtils::Elf::GnuHash::LookupByName(gnu_hash, symtab, strtab, syment, strsz, symbol_name.c_str());
             if (sym) {
-                return ((ehdr->e_type != ET_EXEC) ? load_bias + sym->st_value : sym->st_value);
+                return get_sym_address(sym);
             }
         }
 
         if (elf_hash) {
             const auto *sym = KittyUtils::Elf::ElfHash::LookupByName(elf_hash, symtab, strtab, syment, strsz, symbol_name.c_str());
             if (sym) {
-                return ((ehdr->e_type != ET_EXEC) ? load_bias + sym->st_value : sym->st_value);
+                return get_sym_address(sym);
             }
         }
 
-#if 0 // linear search
-        uintptr_t sym_entry = symtab + syment;
-        for (; sym_entry; sym_entry+=syment) {
+        // linear search
+        uintptr_t sym_entry = symtab;
+        for (; sym_entry; sym_entry += syment) {
             const auto *curr_sym = reinterpret_cast<const ElfW_(Sym) *>(sym_entry);
             if (curr_sym->st_name >= strsz)
                 break;
 
-            if (strcmp((const char *) (strtab + curr_sym->st_name), symbol_name.c_str()) == 0)
-                return ((ehdr->e_type != ET_EXEC) ? load_bias + curr_sym->st_value : curr_sym->st_value);
+            std::string sym_str = std::string((const char *) (strtab + curr_sym->st_name));
+            if (!sym_str.empty() && sym_str == symbol_name)
+                return get_sym_address(curr_sym);
         }
-#endif
 
         return 0;
     }
 
-    uintptr_t findSymbol(const std::string &lib, const std::string &symbol_name) {
+    uintptr_t findSymbol(uintptr_t libBase, const std::string &symbol_name)
+    {
+        auto baseMap = KittyMemory::getAddressMap((void*) libBase);
+        if (!baseMap.isValid()) {
+            KITTY_LOGE("findSymbol: Couldn't find map of address (%p).", (void*)libBase);
+            return 0;
+        }
+        return findSymbol(baseMap, symbol_name);
+    }
+
+    uintptr_t findSymbol(const std::string &lib, const std::string &symbol_name)
+    {
         auto baseMap = KittyMemory::getBaseMapOf(lib);
         if (!baseMap.isValid()) {
             KITTY_LOGE("findSymbol: Couldn't find base map of \"%s\".", lib.c_str());
@@ -311,7 +317,8 @@ namespace KittyScanner
         return findSymbol(baseMap, symbol_name);
     }
 
-    std::vector<std::pair<uintptr_t, std::string>> findSymbolAll(const std::string &symbol_name) {
+    std::vector<std::pair<uintptr_t, std::string>> findSymbolAll(const std::string &symbol_name)
+    {
         std::vector<std::pair<uintptr_t, std::string>> ret{};
 
         auto maps = KittyMemory::getAllMaps();
@@ -325,10 +332,7 @@ namespace KittyScanner
             if (checkedMaps.count(it.startAddress) > 0)
                 continue;
 
-            if (!it.isValid() || it.isUnknown() || !it.readable || it.writeable || !it.is_private)
-                continue;
-
-            if (memcmp(reinterpret_cast<char*>(it.startAddress), "\177ELF", 4) != 0)
+            if (it.isUnknown() || it.writeable || !it.is_private || !it.isValidELF())
                 continue;
 
             // skip dladdr check for linker/linker64

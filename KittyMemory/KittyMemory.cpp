@@ -172,11 +172,29 @@ namespace KittyMemory {
         return retMaps;
     }
 
-    std::vector<ProcMap> getMapsByName(const std::string &name)
+    std::vector<ProcMap> getMapsEqual(const std::string& name)
     {
         if (name.empty()) return {};
 
-        KITTY_LOGD("getMapsByName(%s)", name.c_str());
+        KITTY_LOGD("getMapsContain(%s)", name.c_str());
+
+        std::vector<ProcMap> retMaps;
+
+        auto maps = getAllMaps();
+        for(auto &it : maps) {
+            if (it.isValid() && !it.isUnknown() && it.pathname == name) {
+                retMaps.push_back(it);
+            }
+        }
+
+        return retMaps;
+    }
+
+    std::vector<ProcMap> getMapsContain(const std::string &name)
+    {
+        if (name.empty()) return {};
+
+        KITTY_LOGD("getMapsContain(%s)", name.c_str());
 
         std::vector<ProcMap> retMaps;
 
@@ -184,6 +202,26 @@ namespace KittyMemory {
         for(auto &it : maps) {
             if (it.isValid() && !it.isUnknown() && strstr(it.pathname.c_str(), name.c_str())) {
                 retMaps.push_back(it);
+            }
+        }
+
+        return retMaps;
+    }
+
+    std::vector<ProcMap> getMapsEndWith(const std::string &name)
+    {
+        if (name.empty()) return {};
+
+        KITTY_LOGD("getMapsEndWith(%s)", name.c_str());
+
+        std::vector<ProcMap> retMaps;
+
+        auto maps = getAllMaps();
+        for(auto &it : maps) {
+            if (it.isValid() && !it.isUnknown() && it.pathname.length() >= name.length()) {
+                if (it.pathname.compare(it.pathname.length() - name.length(), name.length(), name) == 0) {
+                    retMaps.push_back(it);
+                }
             }
         }
 
@@ -217,12 +255,12 @@ namespace KittyMemory {
             return retMap;
 
         bool isZippedInAPK = false;
-        auto maps = getMapsByName(name);
+        auto maps = getMapsEndWith(name);
         if (maps.empty())
         {
-            // some apps use dlopen on zipped libraries like base.apk!/lib/xxx/libxxx.so
+            // some apps use dlopen on zipped libraries like xxx.apk!/lib/xxx/libxxx.so
             // so we'll search in app's base.apk maps too
-            maps = getMapsByName("==/base.apk");
+            maps = getMapsEndWith(".apk");
             if (maps.empty()) {
                 return retMap;
             }
@@ -230,8 +268,7 @@ namespace KittyMemory {
         }
 
         for (auto &it: maps) {
-            if (!it.isValid() || it.isUnknown() || !it.readable || it.writeable || !it.is_private) continue;
-            if (memcmp((const void *) it.startAddress, "\177ELF", 4) != 0) continue;
+            if (it.isUnknown() || it.writeable || !it.is_private || !it.isValidELF()) continue;
 
             // skip dladdr check for linker/linker64
             if (strstr(it.pathname.c_str(), "/system/bin/linker")) {

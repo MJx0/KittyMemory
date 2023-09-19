@@ -12,17 +12,12 @@
 
 #include "KittyMemory.hpp"
 
-#ifndef kNO_KEYSTONE
-
 enum MP_ASM_ARCH {
     MP_ASM_ARM32 = 0,
     MP_ASM_ARM64,
     MP_ASM_x86,
     MP_ASM_x86_64,
 };
-
-#endif // kNO_KEYSTONE
-
 
 class MemoryPatch
 {
@@ -38,7 +33,7 @@ public:
     ~MemoryPatch();
 
     static MemoryPatch createWithBytes(uintptr_t absolute_address, const void *patch_code, size_t patch_size);
-    static MemoryPatch createWithHex(uintptr_t absolute_address, const std::string &hex);
+    static MemoryPatch createWithHex(uintptr_t absolute_address, std::string hex);
 
 #ifndef kNO_KEYSTONE
     /**

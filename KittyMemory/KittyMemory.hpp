@@ -90,8 +90,11 @@ namespace KittyMemory
                     is_ro(false), is_rw(false), is_rx(false),
                     offset(0), inode(0) {}
 
-        inline bool isValid() const { return (length > 0); }
+        inline bool isValid() const { return (startAddress && endAddress && length); }
         inline bool isUnknown() const { return pathname.empty(); }
+        inline bool isValidELF() const {
+          return isValid() && length > 4 && readable && memcmp((const void *) startAddress, "\177ELF", 4) == 0;
+        }
     };
 
     /*
@@ -110,9 +113,19 @@ namespace KittyMemory
     std::vector<ProcMap> getAllMaps();
 
     /*
-     * Gets info of all maps which contain "name" in current process
+     * Gets info of all maps which pathname equals @name in current process
      */
-    std::vector<ProcMap> getMapsByName(const std::string& name);
+    std::vector<ProcMap> getMapsEqual(const std::string& name);
+
+    /*
+     * Gets info of all maps which pathname contains @name in current process
+     */
+    std::vector<ProcMap> getMapsContain(const std::string& name);
+
+    /*
+     * Gets info of all maps which pathname ends with @name in current process
+     */
+    std::vector<ProcMap> getMapsEndWith(const std::string& name);
 
     /*
      * Gets map info of an address in self process

@@ -2,5 +2,12 @@
 
 .vscode/
 
+.theos/
+rootless/
+rootful/
+
+libs/
+obj/
+
 *.o
 *.obj

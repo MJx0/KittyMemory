@@ -29,7 +29,7 @@ void *test_thread(void *)
     KITTY_LOGI("==================== SYMBOL LOOKUP ===================");
 
     // symbol lookup by name
-    const char *lib_egl = KittyMemory::getMapsByName("/nb/libEGL.so").empty() ? "libEGL.so" : "/nb/libEGL.so";
+    const char *lib_egl = KittyMemory::getMapsEndWith("/nb/libEGL.so").empty() ? "libEGL.so" : "/nb/libEGL.so";
     uintptr_t p_eglSwapBuffers = KittyScanner::findSymbol(lib_egl, "eglSwapBuffers");
     KITTY_LOGI("eglSwapBuffers = %p", (void*)p_eglSwapBuffers);
 
@@ -99,7 +99,7 @@ void *test_thread(void *)
     KITTY_LOGI("=============== FIND NATIVE REGISTERS ===============");
 
     // get all maps of unity lib
-    std::vector<ProcMap> unityMaps = KittyMemory::getMapsByName("libunity.so");
+    std::vector<ProcMap> unityMaps = KittyMemory::getMapsEndWith("libunity.so");
     
     // finding register native functions
     RegisterNativeFn nativeInjectEvent = KittyScanner::findRegisterNativeFn(unityMaps, "nativeInjectEvent");

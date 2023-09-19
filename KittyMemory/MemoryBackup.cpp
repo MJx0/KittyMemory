@@ -53,7 +53,7 @@ MemoryBackup MemoryBackup::createBackup(const KittyMemory::ProcMap &map, uintptr
 #elif __APPLE__
 MemoryBackup MemoryBackup::createBackup(const char *fileName, uintptr_t address, size_t backup_size)
 {
-  if (!address == 0 || !backup_size)
+  if (!address || !backup_size)
     return MemoryBackup();
 
   return createBackup(KittyMemory::getAbsoluteAddress(fileName, address), backup_size);

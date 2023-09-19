@@ -153,7 +153,8 @@ namespace KittyUtils {
                     if (!symbol || symbol->st_name >= strsz)
                         break;
 
-                    if (strcmp(string_table + symbol->st_name, symbol_name) == 0)
+                    std::string sym_str = std::string(string_table + symbol->st_name);
+                    if (!sym_str.empty() && sym_str == symbol_name)
                         return symbol;
                 }
 
@@ -220,8 +221,11 @@ namespace KittyUtils {
                         break;
 
                     const uint32_t hash = chain[sym_idx - sym_offset];
-                    if ((name_hash | 1) == (hash | 1) && strcmp(string_table + symbol->st_name, symbol_name) == 0)
-                        return symbol;
+                    if ((name_hash | 1) == (hash | 1)) {
+                        std::string sym_str = std::string(string_table + symbol->st_name);
+                        if (!sym_str.empty() && sym_str == symbol_name)
+                            return symbol;
+                    }
 
                     // Chain ends with an element with the lowest bit set to 1.
                     if (hash & 1)
