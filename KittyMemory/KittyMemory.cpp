@@ -440,7 +440,7 @@ namespace KittyMemory {
 
 #ifdef __APPLE__
 
-#ifndef kNO_SUBSTRATE
+#if !defined(kNO_SUBSTRATE) && defined(THEOS_INSTANCE_NAME)
 #include <substrate.h>
 bool findMSHookMemory(void *dst, const void *src, size_t len)
 {
