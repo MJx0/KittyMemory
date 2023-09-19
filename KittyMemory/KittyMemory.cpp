@@ -343,7 +343,7 @@ namespace KittyMemory {
         memcpy(dst, buffer, len);
 
         // original prot on new
-        if (mprotect(new_map, page_len, page_info.protection) == -1)
+        if (mprotect(new_map, page_len, (page_info.protection & (_PROT_RWX_))) == -1)
         {
             KITTY_LOGE("memWrite err failed to set new_map to original protection (new_map: %p, len: %zu, prot: %d).",
                        new_map, page_len, page_info.protection);
