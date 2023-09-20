@@ -176,7 +176,7 @@ namespace KittyMemory {
     {
         if (name.empty()) return {};
 
-        KITTY_LOGD("getMapsContain(%s)", name.c_str());
+        KITTY_LOGD("getMapsEqual(%s)", name.c_str());
 
         std::vector<ProcMap> retMaps;
 

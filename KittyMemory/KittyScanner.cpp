@@ -248,7 +248,7 @@ namespace KittyScanner
         }
 
         // Check that we have all program headers required for dynamic linking
-        if (!loads || !strtab || !symtab) {
+        if (!loads || !strtab || !symtab || !strsz || !syment) {
             KITTY_LOGE("findSymbol: failed to require all program headers for dynamic linking.");
             KITTY_LOGE("findSymbol: loads: %d | strtab=%p | symtab=%p", loads, (void *) strtab, (void *) symtab);
             KITTY_LOGE("[%p - %p] \"%s\".", (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
