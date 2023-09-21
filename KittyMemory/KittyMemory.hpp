@@ -68,7 +68,7 @@ namespace KittyMemory
     /*
      * Reads an address content into a buffer
      */
-    bool memRead(void *buffer, const void *address, size_t len);
+    bool memRead(const void *address, void *buffer, size_t len);
 
 #ifdef __ANDROID__
 

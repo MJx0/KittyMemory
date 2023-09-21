@@ -36,7 +36,7 @@ MemoryBackup MemoryBackup::createBackup(uintptr_t absolute_address, size_t backu
   backup._orig_code.resize(backup_size);
 
   // backup current content
-  KittyMemory::memRead(&backup._orig_code[0], reinterpret_cast<const void *>(backup._address), backup_size);
+  KittyMemory::memRead(reinterpret_cast<const void *>(backup._address), &backup._orig_code[0], backup_size);
 
   return backup;
 }

@@ -29,7 +29,7 @@ namespace KittyMemory {
         return ret;
     }
 
-    bool memRead(void *address, const void *buffer, size_t len)
+    bool memRead(const void *address, void *buffer, size_t len)
     {
         KITTY_LOGD("memRead(%p, %p, %zu)", address, buffer, len);
 
@@ -48,7 +48,7 @@ namespace KittyMemory {
             return false;
         }
 
-        memcpy(address, buffer, len);
+        memcpy(buffer, address, len);
         return true;
     }
 

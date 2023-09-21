@@ -46,8 +46,8 @@ MemoryPatch MemoryPatch::createWithBytes(uintptr_t absolute_address, const void 
   patch._patch_code.resize(patch_size);
 
   // initialize patch & backup current content
-  KittyMemory::memRead(&patch._patch_code[0], patch_code, patch_size);
-  KittyMemory::memRead(&patch._orig_code[0], reinterpret_cast<const void *>(patch._address), patch_size);
+  KittyMemory::memRead(patch_code, &patch._patch_code[0], patch_size);
+  KittyMemory::memRead(reinterpret_cast<const void *>(patch._address), &patch._orig_code[0], patch_size);
   return patch;
 }
 
@@ -55,7 +55,7 @@ MemoryPatch MemoryPatch::createWithHex(uintptr_t absolute_address, std::string h
 {
   MemoryPatch patch;
 
-  if (absolute_address == 0 || !KittyUtils::validateHexString(hex))
+  if (!absolute_address || !KittyUtils::validateHexString(hex))
     return patch;
 
   patch._address = absolute_address;
@@ -68,7 +68,7 @@ MemoryPatch MemoryPatch::createWithHex(uintptr_t absolute_address, std::string h
   KittyUtils::dataFromHex(hex, &patch._patch_code[0]);
 
   // backup current content
-  KittyMemory::memRead(&patch._orig_code[0], reinterpret_cast<const void *>(patch._address), patch._size);
+  KittyMemory::memRead(reinterpret_cast<const void *>(patch._address), &patch._orig_code[0], patch._size);
   return patch;
 }
 
