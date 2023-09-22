@@ -135,7 +135,7 @@ namespace KittyMemory
     /*
      * Gets the base map of a loaded shared object
      */
-    ProcMap getBaseMapOf(const std::string& name);
+    ProcMap getElfBaseMap(const std::string& name);
 
 #elif __APPLE__
 

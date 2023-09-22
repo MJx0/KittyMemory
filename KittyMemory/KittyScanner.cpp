@@ -52,7 +52,7 @@ namespace KittyScanner
     {
         std::vector<uintptr_t> list;
 
-        if (start >= end)
+        if (start >= end || !bytes || mask.empty())
             return list;
 
         uintptr_t curr_search_address = start;
@@ -309,7 +309,7 @@ namespace KittyScanner
 
     uintptr_t findSymbol(const std::string &lib, const std::string &symbol_name)
     {
-        auto baseMap = KittyMemory::getBaseMapOf(lib);
+        auto baseMap = KittyMemory::getElfBaseMap(lib);
         if (!baseMap.isValid()) {
             KITTY_LOGE("findSymbol: Couldn't find base map of \"%s\".", lib.c_str());
             return 0;

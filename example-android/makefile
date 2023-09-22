@@ -1,5 +1,5 @@
 all:
-	  @$(NDK_HOME)/ndk-build -B\
+	  @$(NDK_HOME)/ndk-build -j4 -B\
 	   NDK_PROJECT_PATH=.\
            NDK_APPLICATION_MK=./Application.mk\
 

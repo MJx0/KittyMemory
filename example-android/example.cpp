@@ -48,8 +48,8 @@ void *test_thread(void *)
     
     do {
         sleep(1);
-        // getBaseMapOf can also find lib base even if it was loaded from zipped base.apk
-        g_il2cppBaseMap = KittyMemory::getBaseMapOf("libil2cpp.so");
+        // getElfBaseMap can also find lib base even if it was loaded from zipped base.apk
+        g_il2cppBaseMap = KittyMemory::getElfBaseMap("libil2cpp.so");
     } while (!g_il2cppBaseMap.isValid());
 
     KITTY_LOGI("il2cpp base: %p", (void*)(g_il2cppBaseMap.startAddress));

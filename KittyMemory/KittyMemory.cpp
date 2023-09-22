@@ -247,7 +247,7 @@ namespace KittyMemory {
         return retMap;
     }
 
-    ProcMap getBaseMapOf(const std::string& name)
+    ProcMap getElfBaseMap(const std::string& name)
     {
         ProcMap retMap{};
 
