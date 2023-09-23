@@ -270,29 +270,34 @@ namespace KittyScanner
         // try gnu hash first
         if (gnu_hash) {
             const auto *sym = KittyUtils::Elf::GnuHash::LookupByName(gnu_hash, symtab, strtab, syment, strsz, symbol_name.c_str());
-            if (sym) {
+            if (sym && sym->st_value) {
                 return get_sym_address(sym);
             }
         }
 
         if (elf_hash) {
             const auto *sym = KittyUtils::Elf::ElfHash::LookupByName(elf_hash, symtab, strtab, syment, strsz, symbol_name.c_str());
-            if (sym) {
+            if (sym && sym->st_value) {
                 return get_sym_address(sym);
             }
         }
 
+#if 0
         // linear search
         uintptr_t sym_entry = symtab;
         for (; sym_entry; sym_entry += syment) {
             const auto *curr_sym = reinterpret_cast<const ElfW_(Sym) *>(sym_entry);
-            if (curr_sym->st_name >= strsz)
+            if (!curr_sym->st_name || curr_sym->st_name >= strsz)
                 break;
+
+            if (!curr_sym->st_value)
+                continue;
 
             std::string sym_str = std::string((const char *) (strtab + curr_sym->st_name));
             if (!sym_str.empty() && sym_str == symbol_name)
                 return get_sym_address(curr_sym);
         }
+#endif
 
         return 0;
     }
