@@ -181,21 +181,21 @@ namespace KittyScanner
     {
         if (!baseMap.isValidELF()) {
             KITTY_LOGE("findSymbol: map is not a valid ELF [%p - %p] \"%s\".",
-                       (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
+                    (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
             return 0;
         }
 
         auto ident = reinterpret_cast<unsigned char *>(baseMap.startAddress);
         if (ident[EI_CLASS] != ELF_EICLASS_) {
             KITTY_LOGE("findSymbol: ELF class mismatch [%p - %p] \"%s\".",
-                       (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
+                    (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
             return 0;
         }
 
         auto *ehdr = reinterpret_cast<ElfW_(Ehdr) *>(baseMap.startAddress);
         if (!ehdr->e_phnum || !ehdr->e_phentsize || !ehdr->e_shnum || !ehdr->e_shentsize) {
             KITTY_LOGE("findSymbol: Invalid header values [%p - %p] \"%s\".",
-                       (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
+                    (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
             return 0;
         }
 
@@ -206,19 +206,12 @@ namespace KittyScanner
             auto *phdr = reinterpret_cast<ElfW_(Phdr) *>((baseMap.startAddress + ehdr->e_phoff) + (i * ehdr->e_phentsize));
             if (phdr->p_type == PT_LOAD) {
                 if (phdr->p_vaddr < min_vaddr) {
-                    min_vaddr = _PAGE_START_OF_(phdr->p_vaddr);
-                    load_bias = baseMap.startAddress - min_vaddr;
-                }
-                if (ehdr->e_type == ET_EXEC) {
-                    if (phdr->p_vaddr - phdr->p_offset < load_bias) {
-                        KITTY_LOGE("findSymbol: This is not the lowest base of the ELF [%p - %p] \"%s\".",
-                                   (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
-                        return 0;
-                    }
+                    min_vaddr = phdr->p_vaddr;
+                    load_bias = baseMap.startAddress - _PAGE_START_OF_(min_vaddr);
                 }
                 loads++;
             } else if (phdr->p_type == PT_DYNAMIC) {
-                auto *dyn_curr = reinterpret_cast<ElfW_(Dyn) *>((ehdr->e_type != ET_EXEC) ? load_bias + phdr->p_vaddr : phdr->p_vaddr);
+                auto *dyn_curr = reinterpret_cast<ElfW_(Dyn) *>(load_bias + phdr->p_vaddr);
                 auto *dyn_end = dyn_curr + (phdr->p_memsz / sizeof(ElfW_(Dyn)));
                 for (; dyn_curr && dyn_curr < dyn_end && dyn_curr->d_tag != DT_NULL; dyn_curr++) {
                     switch (dyn_curr->d_tag) {
@@ -259,7 +252,7 @@ namespace KittyScanner
             if (table_addr && table_addr < load_bias) table_addr += load_bias;
         };
         auto get_sym_address = [&](const ElfW_(Sym) *sym_ent) -> uintptr_t {
-            return ((ehdr->e_type != ET_EXEC) ? load_bias + sym_ent->st_value : sym_ent->st_value);
+            return sym_ent->st_value < load_bias ? load_bias + sym_ent->st_value : sym_ent->st_value;
         };
 
         fix_table_address(strtab);
@@ -287,10 +280,10 @@ namespace KittyScanner
         uintptr_t sym_entry = symtab;
         for (; sym_entry; sym_entry += syment) {
             const auto *curr_sym = reinterpret_cast<const ElfW_(Sym) *>(sym_entry);
-            if (!curr_sym->st_name || curr_sym->st_name >= strsz)
+            if (curr_sym->st_name >= strsz)
                 break;
 
-            if (!curr_sym->st_value)
+            if (!curr_sym->st_name || !curr_sym->st_value)
                 continue;
 
             std::string sym_str = std::string((const char *) (strtab + curr_sym->st_name));

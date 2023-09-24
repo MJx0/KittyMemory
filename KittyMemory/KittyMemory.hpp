@@ -37,7 +37,7 @@
 #ifdef kITTYMEMORY_DEBUG
 #define KITTY_LOGD(fmt, ...) ((void)__android_log_print(ANDROID_LOG_DEBUG, KITTY_LOG_TAG, fmt, ##__VA_ARGS__))
 #else
-#define KITTY_LOGD(fmt, ...)
+#define KITTY_LOGD(fmt, ...) do {} while(0)
 #endif
 
 #define KITTY_LOGI(fmt, ...) ((void)__android_log_print(ANDROID_LOG_INFO, KITTY_LOG_TAG, fmt,  ##__VA_ARGS__))
@@ -47,13 +47,13 @@
 #include <os/log.h>
 
 #ifdef kITTYMEMORY_DEBUG
-#define KITTY_LOGD(fmt, ...) os_log(OS_LOG_DEFAULT, KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
+#define KITTY_LOGD(fmt, ...) os_log(OS_LOG_DEFAULT, "D " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
 #else
-#define KITTY_LOGD(fmt, ...)
+#define KITTY_LOGD(fmt, ...) do {} while(0)
 #endif
 
-#define KITTY_LOGI(fmt, ...) os_log(OS_LOG_DEFAULT, KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
-#define KITTY_LOGE(fmt, ...) os_log_error(OS_LOG_DEFAULT, KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
+#define KITTY_LOGI(fmt, ...) os_log(OS_LOG_DEFAULT, "I " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
+#define KITTY_LOGE(fmt, ...) os_log_error(OS_LOG_DEFAULT, "E " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
 
 #endif
 

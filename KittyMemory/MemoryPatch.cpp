@@ -37,9 +37,6 @@ MemoryPatch MemoryPatch::createWithBytes(uintptr_t absolute_address, const void 
     return patch;
 
   patch._address = absolute_address;
-  if (!patch._address)
-    return patch;
-
   patch._size = patch_size;
 
   patch._orig_code.resize(patch_size);
