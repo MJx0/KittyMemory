@@ -1,3 +1,6 @@
+## https://theos.dev/docs/arm64e-deployment
+## export DEVELOPER_DIR=/Applications/Xcode-11.7.app/Contents/Developer
+
 ## build for rootful/rootless
 THEOS_PACKAGE_SCHEME = rootless
 ##THEOS_DEVICE_IP = 

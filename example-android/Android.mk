@@ -16,7 +16,6 @@ LOCAL_MODULE := KittyMemoryExample
 
 LOCAL_SRC_FILES := example.cpp $(KITTYMEMORY_SRC)
 
-LOCAL_C_INCLUDES += $(KITTYMEMORY_PATH)/../
 ## add keystone
 LOCAL_STATIC_LIBRARIES := Keystone
 
