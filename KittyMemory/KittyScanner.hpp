@@ -58,6 +58,28 @@ namespace KittyScanner
     uintptr_t findHexFirst(const uintptr_t start, const uintptr_t end, std::string hex, const std::string& mask);
 
     /**
+     * Search for ida pattern within a memory range and return all results
+     *
+     * @param start: search start address
+     * @param end: search end address
+     * @param pattern: hex bytes and wildcard "?" ( FF DD ? 99 CC ? 00 )
+     *
+     * @return vector list of all found pattern addresses
+     */
+    std::vector<uintptr_t> findIdaPatternAll(const uintptr_t start, const uintptr_t end, const std::string& pattern);
+
+    /**
+     * Search for ida pattern within a memory range and return first result
+     *
+     * @param start: search start address
+     * @param end: search end address
+     * @param pattern: hex bytes and wildcard "?" ( FF DD ? 99 CC ? 00 )
+     *
+     * @return first found pattern address
+     */
+    uintptr_t findIdaPatternFirst(const uintptr_t start, const uintptr_t end, const std::string& pattern);
+
+    /**
      * Search for data within a memory range and return all results
      * 
      * @start: search start address

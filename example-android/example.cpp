@@ -131,6 +131,13 @@ void test_thread()
     found_at_list = KittyScanner::findHexAll(search_start, search_end, "33 44 55 66 00 77 88 00 99", "xxxx??x?x");
     KITTY_LOGI("found hex results: %zu", found_at_list.size());
 
+    // scan with IDA pattern get one result
+    found_at = KittyScanner::findIdaPatternFirst(search_start, search_end, "33 ? 55 66 ? 77 88 ? 99");
+    KITTY_LOGI("found IDA pattern at: %p", (void *)found_at);
+    // scan with IDA pattern get all results
+    found_at_list = KittyScanner::findIdaPatternAll(search_start, search_end, "33 ? 55 66 ? 77 88 ? 99");
+    KITTY_LOGI("found IDA pattern results: %zu", found_at_list.size());
+
     // scan with data type & get one result
     uint32_t data = 0xdeadbeef;
     found_at = KittyScanner::findDataFirst(search_start, search_end, &data, sizeof(data));
