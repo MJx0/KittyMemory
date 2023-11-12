@@ -5,7 +5,6 @@
 //
 
 #include "KittyMemory.hpp"
-#include "KittyUtils.hpp"
 
 #ifdef __ANDROID__
 #include <map>
@@ -218,10 +217,8 @@ namespace KittyMemory {
 
         auto maps = getAllMaps();
         for(auto &it : maps) {
-            if (it.isValid() && !it.isUnknown() && it.pathname.length() >= name.length()) {
-                if (it.pathname.compare(it.pathname.length() - name.length(), name.length(), name) == 0) {
-                    retMaps.push_back(it);
-                }
+            if (it.isValid() && !it.isUnknown() && KittyUtils::string_endswith(it.pathname, name)) {
+                retMaps.push_back(it);
             }
         }
 
@@ -238,7 +235,7 @@ namespace KittyMemory {
 
         auto maps = getAllMaps();
         for(auto &it : maps) {
-            if (it.isValid() && (uintptr_t)address >= it.startAddress && (uintptr_t)address <= it.endAddress) {
+            if (it.isValid() && it.contains((uintptr_t)address)) {
                 retMap = it;
                 break;
             }
@@ -268,10 +265,10 @@ namespace KittyMemory {
         }
 
         for (auto &it: maps) {
-            if (it.isUnknown() || it.writeable || !it.is_private || !it.isValidELF()) continue;
+            if (it.isUnknown() || !it.is_private || !it.isValidELF()) continue;
 
             // skip dladdr check for linker/linker64
-            if (strstr(it.pathname.c_str(), "/system/bin/linker")) {
+            if (strstr(it.pathname.c_str(), "/bin/linker")) {
                 retMap = it;
                 break;
             }
@@ -288,7 +285,7 @@ namespace KittyMemory {
             }
 
             // if library is zipped inside base.apk, compare dli_fname and fix pathname
-            if (strstr(info.dli_fname, name.c_str())) {
+            if (KittyUtils::string_endswith(info.dli_fname, name)) {
                 retMap = it;
                 retMap.pathname = info.dli_fname;
                 break;
@@ -442,7 +439,7 @@ namespace KittyMemory {
 
             std::string fullpath(name);
 
-            if (fullpath.length() < fileName.length() || fullpath.compare(fullpath.length() - fileName.length(), fileName.length(), fileName) != 0)
+            if (!KittyUtils::string_endswith(fullpath, fileName))
                 continue;
 
             _info.index = i;
@@ -505,7 +502,7 @@ bool findMSHookMemory(void *dst, const void *src, size_t len)
     return false;
 }
 #else
-bool findMSHookMemory(void *dst, const void *src, size_t len) { return false; }
+bool findMSHookMemory(void *, const void *, size_t) { return false; }
 #endif
 
 #endif // __APPLE__

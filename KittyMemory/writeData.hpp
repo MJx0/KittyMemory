@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <sys/_types/_uintptr_t.h>
 #ifdef __APPLE__
 
 #include <cmath>

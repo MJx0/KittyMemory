@@ -119,6 +119,8 @@ namespace KittyScanner
       const size_t pattren_len = pattern.length();
       for (std::size_t i = 0; i < pattren_len; i++)
       {
+        if (pattern[i] == ' ') continue;
+
         if (pattern[i] == '?')
         {
           bytes.push_back(0);
@@ -148,6 +150,8 @@ namespace KittyScanner
       const size_t pattren_len = pattern.length();
       for (std::size_t i = 0; i < pattren_len; i++)
       {
+        if (pattern[i] == ' ') continue;
+        
         if (pattern[i] == '?')
         {
           bytes.push_back(0);
@@ -389,11 +393,11 @@ namespace KittyScanner
             if (checkedMaps.count(it.startAddress) > 0)
                 continue;
 
-            if (it.isUnknown() || it.writeable || !it.is_private || !it.isValidELF())
+            if (it.isUnknown() || !it.is_private || !it.isValidELF())
                 continue;
 
             // skip dladdr check for linker/linker64
-            if (!strstr(it.pathname.c_str(), "/system/bin/linker")) {
+            if (!strstr(it.pathname.c_str(), "/bin/linker")) {
                 Dl_info info{};
                 int rt = dladdr((void *) it.startAddress, &info);
                 // check dli_fname and dli_fbase if NULL

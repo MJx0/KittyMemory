@@ -18,6 +18,8 @@
 #include <libkern/OSCacheControl.h>
 #endif
 
+#include "KittyUtils.hpp"
+
 #define _SYS_PAGE_SIZE_ (sysconf(_SC_PAGE_SIZE))
 
 #define _PAGE_START_OF_(x) ((uintptr_t)x & ~(uintptr_t)(_SYS_PAGE_SIZE_ - 1))
@@ -92,8 +94,14 @@ namespace KittyMemory
 
         inline bool isValid() const { return (startAddress && endAddress && length); }
         inline bool isUnknown() const { return pathname.empty(); }
-        inline bool isValidELF() const {
-          return isValid() && length > 4 && readable && memcmp((const void *) startAddress, "\177ELF", 4) == 0;
+        inline bool isValidELF() const { return isValid() && length > 4 && readable && memcmp((const void *) startAddress, "\177ELF", 4) == 0; }
+        inline bool contains(uintptr_t address) const { return address >= startAddress && address <= endAddress; }
+        inline std::string toString()
+        {
+          return KittyUtils::strfmt("%llx-%llx %c%c%c%c %llx %s %lu %s",
+              startAddress, endAddress,
+              readable ? 'r' : '-', writeable ? 'w' : '-', executable ? 'x' : '-', is_private ? 'p' : 's',
+              offset, dev.c_str(), inode, pathname.c_str());
         }
     };
 
