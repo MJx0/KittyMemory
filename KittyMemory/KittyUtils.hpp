@@ -27,7 +27,32 @@
 
 namespace KittyUtils {
 
+    #ifdef __ANDROID__
+    static inline std::string getExternalStorage()
+    {
+        char *storage = getenv("EXTERNAL_STORAGE");
+        return storage ? storage : "/sdcard";
+    }
+#endif
+
     std::string fileNameFromPath(const std::string &filePath);
+    std::string fileDirectory(const std::string &filePath);
+    std::string fileExtension(const std::string &filePath);
+
+    static inline bool string_startswith(const std::string &str, const std::string &str2)
+    {
+        return str.length() >= str2.length() && str.compare(0, str2.length(), str2) == 0;
+    }
+
+    static inline bool string_contains(const std::string &str, const std::string &str2)
+    {
+        return str.length() >= str2.length() && str.find(str2) != std::string::npos;
+    }
+
+    static inline bool string_endswith(const std::string &str, const std::string &str2)
+    {
+        return str.length() >= str2.length() && str.compare(str.length() - str2.length(), str2.length(), str2) == 0;
+    }
 
     void trim_string(std::string &str);
     bool validateHexString(std::string &hex);

@@ -11,6 +11,24 @@ namespace KittyUtils {
         return filename;
     }
 
+    std::string fileDirectory(const std::string &filePath)
+    {
+        std::string directory;
+        const size_t last_slash_idx = filePath.find_last_of("/\\");
+        if (std::string::npos != last_slash_idx)
+            directory = filePath.substr(0, last_slash_idx);
+        return directory;
+    }
+
+    std::string fileExtension(const std::string &filePath)
+    {
+        std::string ext;
+        const size_t last_slash_idx = filePath.find_last_of(".");
+        if (std::string::npos != last_slash_idx)
+            ext = filePath.substr(last_slash_idx + 1);
+        return ext;
+    }
+
     void trim_string(std::string &str) 
     {
         // https://www.techiedelight.com/remove-whitespaces-string-cpp/
