@@ -13,19 +13,23 @@
 #include <vector>
 
 #ifdef __APPLE__
-#include <mach-o/dyld.h>
 #include <mach/mach.h>
+#include <mach-o/dyld.h>
+#include <mach-o/getsect.h>
 #include <libkern/OSCacheControl.h>
 #endif
 
 #include "KittyUtils.hpp"
 
-#define _SYS_PAGE_SIZE_ (sysconf(_SC_PAGE_SIZE))
+#define KT_PAGE_SIZE (sysconf(_SC_PAGE_SIZE))
 
-#define _PAGE_START_OF_(x) ((uintptr_t)x & ~(uintptr_t)(_SYS_PAGE_SIZE_ - 1))
-#define _PAGE_END_OF_(x, len) (_PAGE_START_OF_((uintptr_t)x + len - 1))
-#define _PAGE_LEN_OF_(x, len) (_PAGE_END_OF_(x, len) - _PAGE_START_OF_(x) + _SYS_PAGE_SIZE_)
-#define _PAGE_OFFSET_OF_(x) ((uintptr_t)x - _PAGE_START_OF_(x))
+#define KT_PAGE_START(x) (uintptr_t(x) & ~(KT_PAGE_SIZE - 1))
+#define KT_PAGE_END(x) (KT_PAGE_START(x + KT_PAGE_SIZE - 1))
+#define KT_PAGE_OFFSET(x) (uintptr_t(x) - KT_PAGE_START(x))
+#define KT_PAGE_LEN(x) (size_t(KT_PAGE_SIZE - KT_PAGE_OFFSET(x)))
+
+#define KT_PAGE_END2(x, len) (KT_PAGE_START(uintptr_t(x) + len - 1))
+#define KT_PAGE_LEN2(x, len) (KT_PAGE_END2(x, len) - KT_PAGE_START(x) + KT_PAGE_SIZE)
 
 #define _PROT_RWX_ (PROT_READ | PROT_WRITE | PROT_EXEC)
 #define _PROT_RX_ (PROT_READ | PROT_EXEC)
@@ -65,7 +69,7 @@ namespace KittyMemory
     /*
      * mprotect wrapper
      */
-    int setAddressProtection(void *address, size_t length, int protection);
+    int setAddressProtection(const void *address, size_t length, int protection);
 
     /*
      * Reads an address content into a buffer
@@ -95,10 +99,10 @@ namespace KittyMemory
         inline bool isValid() const { return (startAddress && endAddress && length); }
         inline bool isUnknown() const { return pathname.empty(); }
         inline bool isValidELF() const { return isValid() && length > 4 && readable && memcmp((const void *) startAddress, "\177ELF", 4) == 0; }
-        inline bool contains(uintptr_t address) const { return address >= startAddress && address <= endAddress; }
+        inline bool contains(uintptr_t address) const { return address >= startAddress && address < endAddress; }
         inline std::string toString()
         {
-          return KittyUtils::strfmt("%llx-%llx %c%c%c%c %llx %s %lu %s",
+          return KittyUtils::String::Fmt("%llx-%llx %c%c%c%c %llx %s %lu %s",
               startAddress, endAddress,
               readable ? 'r' : '-', writeable ? 'w' : '-', executable ? 'x' : '-', is_private ? 'p' : 's',
               offset, dev.c_str(), inode, pathname.c_str());
@@ -123,22 +127,42 @@ namespace KittyMemory
     /*
      * Gets info of all maps which pathname equals @name in current process
      */
-    std::vector<ProcMap> getMapsEqual(const std::string& name);
+    std::vector<ProcMap> getMapsEqual(const std::vector<ProcMap> &maps, const std::string& name);
 
     /*
      * Gets info of all maps which pathname contains @name in current process
      */
-    std::vector<ProcMap> getMapsContain(const std::string& name);
+    std::vector<ProcMap> getMapsContain(const std::vector<ProcMap> &maps, const std::string& name);
 
     /*
      * Gets info of all maps which pathname ends with @name in current process
      */
-    std::vector<ProcMap> getMapsEndWith(const std::string& name);
+    std::vector<ProcMap> getMapsEndWith(const std::vector<ProcMap> &maps, const std::string& name);
 
     /*
      * Gets map info of an address in self process
      */
-    ProcMap getAddressMap(const void *address);
+    ProcMap getAddressMap(const std::vector<ProcMap> &maps, const void *address);
+
+    /*
+     * Gets info of all maps which pathname equals @name in current process
+     */
+    inline std::vector<ProcMap> getMapsEqual(const std::string& name) { return getMapsEqual(getAllMaps(), name); }
+
+    /*
+     * Gets info of all maps which pathname contains @name in current process
+     */
+    inline std::vector<ProcMap> getMapsContain(const std::string& name) { return getMapsContain(getAllMaps(), name); }
+
+    /*
+     * Gets info of all maps which pathname ends with @name in current process
+     */
+    inline std::vector<ProcMap> getMapsEndWith(const std::string& name) { return getMapsEndWith(getAllMaps(), name); }
+
+    /*
+     * Gets map info of an address in self process
+     */
+    inline ProcMap getAddressMap(const void *address) { return getAddressMap(getAllMaps(), address); }
 
     /*
      * Gets the base map of a loaded shared object
@@ -160,14 +184,42 @@ namespace KittyMemory
       KMS_ERR_VMCOPY,
     };
 
+    struct seg_data_t {
+      uintptr_t start, end;
+      unsigned long size;
+      seg_data_t() : start(0), end(0), size(0) {}
+    };
+    
     class MemoryFileInfo {
     public:
       uint32_t index;
+#ifdef __LP64__
+      const mach_header_64 *header;
+#else
       const mach_header *header;
+#endif
       const char *name;
       intptr_t address;
 
       MemoryFileInfo() : index(0), header(nullptr), name(nullptr), address(0) {}
+
+      inline seg_data_t getSegment(const char *seg_name) const
+      {
+        seg_data_t data;
+        if (!header || !seg_name) return data;
+        data.start = uintptr_t(getsegmentdata(header, seg_name, &data.size));
+        data.end = data.start + data.end;
+        return data;
+      }
+
+      inline seg_data_t getSection(const char *seg_name, const char *sect_name) const
+      {
+        seg_data_t data;
+        if (!header || !seg_name || !sect_name) return data;
+        data.start = uintptr_t(getsectiondata(header, seg_name, sect_name, &data.size));
+        data.end = data.start + data.end;
+        return data;
+      }
     };
 
     /*

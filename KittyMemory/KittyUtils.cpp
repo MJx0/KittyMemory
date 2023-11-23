@@ -2,6 +2,40 @@
 
 namespace KittyUtils {
 
+#ifdef __ANDROID__
+    std::string getExternalStorage()
+    {
+        char *storage = getenv("EXTERNAL_STORAGE");
+        return storage ? storage : "/sdcard";
+    }
+
+    int getAndroidVersion()
+    {
+        static int ver = 0;
+        if (ver > 0)
+            return ver;
+
+        char buf[0xff] = { 0 };
+        if (__system_property_get("ro.build.version.release", buf))
+            ver = std::atoi(buf);
+
+        return ver;
+    }
+
+    int getAndroidSDK()
+    {
+        static int sdk = 0;
+        if (sdk > 0)
+            return sdk;
+
+        char buf[0xff] = { 0 };
+        if (__system_property_get("ro.build.version.sdk", buf))
+            sdk = std::atoi(buf);
+
+        return sdk;
+    }
+#endif
+
     std::string fileNameFromPath(const std::string &filePath)
     {
         std::string filename;
@@ -29,7 +63,7 @@ namespace KittyUtils {
         return ext;
     }
 
-    void trim_string(std::string &str) 
+    void String::Trim(std::string &str) 
     {
         // https://www.techiedelight.com/remove-whitespaces-string-cpp/
         str.erase(std::remove_if(str.begin(), str.end(), [](char c)
@@ -38,14 +72,14 @@ namespace KittyUtils {
                   str.end());
     }
 
-    bool validateHexString(std::string &hex) 
+    bool String::ValidateHex(std::string &hex) 
     {
         if (hex.empty()) return false;
 
         if (hex.compare(0, 2, "0x") == 0)
             hex.erase(0, 2);
 
-        trim_string(hex); // first remove spaces
+        Trim(hex); // first remove spaces
         
         if (hex.length() < 2 || hex.length() % 2 != 0) return false;
 
@@ -57,7 +91,7 @@ namespace KittyUtils {
         return true;
     }
 
-    std::string strfmt(const char *fmt, ...)
+    std::string String::Fmt(const char *fmt, ...)
     {
       if (!fmt)
         return "";
@@ -75,6 +109,20 @@ namespace KittyUtils {
       va_end(args);
 
       return std::string(&buffer[0]);
+    }
+
+    std::string String::Random(size_t length)
+    {
+        static const std::string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        
+        thread_local static std::default_random_engine rnd(std::random_device{}());
+        thread_local static std::uniform_int_distribution<std::string::size_type> dist(0, chars.size()-1);
+
+        std::string str(length, '\0');
+        for (size_t i = 0; i < length; ++i)
+            str[i] = chars[dist(rnd)];
+
+        return str;
     }
 
     // https://tweex.net/post/c-anything-tofrom-a-hex-string/

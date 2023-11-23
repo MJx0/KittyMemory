@@ -9,9 +9,10 @@
 #ifdef __ANDROID__
 using KittyMemory::ProcMap;
 using KittyScanner::RegisterNativeFn;
+using KittyScanner::ElfScanner;
 
 #elif __APPLE__
 #include "writeData.hpp"
+using KittyMemory::seg_data_t;
 using KittyMemory::MemoryFileInfo;
-
 #endif

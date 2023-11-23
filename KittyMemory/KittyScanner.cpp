@@ -81,7 +81,7 @@ namespace KittyScanner
     {
         std::vector<uintptr_t> list;
         
-        if (start >= end || mask.empty() || !KittyUtils::validateHexString(hex)) return list;
+        if (start >= end || mask.empty() || !KittyUtils::String::ValidateHex(hex)) return list;
 
         const size_t scan_size = mask.length();
         if((hex.length() / 2) != scan_size) return list;
@@ -95,7 +95,7 @@ namespace KittyScanner
 
     uintptr_t findHexFirst(const uintptr_t start, const uintptr_t end, std::string hex, const std::string& mask) 
     {
-        if (start >= end || mask.empty() || !KittyUtils::validateHexString(hex)) return 0;
+        if (start >= end || mask.empty() || !KittyUtils::String::ValidateHex(hex)) return 0;
 
         const size_t scan_size = mask.length();
         if((hex.length() / 2) != scan_size) return 0;
@@ -240,152 +240,239 @@ namespace KittyScanner
 #define DT_GNU_HASH 0x6ffffef5
 #endif
 
-    uintptr_t findSymbol(const KittyMemory::ProcMap &baseMap, const std::string &symbol_name)
+/* ======================= ElfScanner ======================= */
+
+// refs https://gist.github.com/resilar/24bb92087aaec5649c9a2afc0b4350c8
+
+    ElfScanner::ElfScanner(uintptr_t elfBase, const std::vector<KittyMemory::ProcMap> &maps)
     {
-        if (!baseMap.isValidELF()) {
-            KITTY_LOGE("findSymbol: map is not a valid ELF [%p - %p] \"%s\".",
-                    (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
-            return 0;
+        _elfBase = 0;
+        _ehdr = {};
+        _phdr = 0;
+        _loads = 0;
+        _loadBias = 0;
+        _loadSize = 0;
+        _bss = 0;
+        _bssSize = 0;
+        _dynamic = 0;
+        _stringTable = 0;
+        _symbolTable = 0;
+        _elfHashTable = 0;
+        _gnuHashTable = 0;
+        _strsz = 0;
+        _syment = 0;
+
+        if (!elfBase)
+            return;
+
+        // verify address
+        auto elfBaseMap = KittyMemory::getAddressMap(maps, (const void *)elfBase);
+        if (!elfBaseMap.isValid() || !elfBaseMap.readable || elfBase != elfBaseMap.startAddress)
+        {
+            KITTY_LOGD("ElfScanner: (%p) is not a valid ELF base address.", (void*)elfBase);
+            return;
         }
 
-        auto ident = reinterpret_cast<unsigned char *>(baseMap.startAddress);
-        if (ident[EI_CLASS] != ELF_EICLASS_) {
-            KITTY_LOGE("findSymbol: ELF class mismatch [%p - %p] \"%s\".",
-                    (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
-            return 0;
+        // verify ELF header
+        if (!elfBaseMap.isValidELF())
+        {
+            KITTY_LOGD("ElfScanner: (%p) is not a valid ELF.", (void*)elfBase);
+            return;
         }
 
-        auto *ehdr = reinterpret_cast<ElfW_(Ehdr) *>(baseMap.startAddress);
-        if (!ehdr->e_phnum || !ehdr->e_phentsize || !ehdr->e_shnum || !ehdr->e_shentsize) {
-            KITTY_LOGE("findSymbol: Invalid header values [%p - %p] \"%s\".",
-                    (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
-            return 0;
+        _elfBase = elfBase;
+
+        // read ELF header
+        _ehdr = *(ElfW_(Ehdr)*)elfBase;
+
+        // check ELF bit
+        if (_ehdr.e_ident[EI_CLASS] != ELF_EICLASS_) {
+            KITTY_LOGD("ElfScanner: ELF class mismatch (%p).", (void*)elfBase);
+            return;
         }
 
-        int loads = 0;
-        uintptr_t min_vaddr = UINTPTR_MAX, load_bias = 0, strtab = 0, symtab = 0, elf_hash = 0, gnu_hash = 0;
-        size_t strsz = 0, syment = 0;
-        for (ElfW_(Half) i = 0; i < ehdr->e_phnum; i++) {
-            auto *phdr = reinterpret_cast<ElfW_(Phdr) *>((baseMap.startAddress + ehdr->e_phoff) + (i * ehdr->e_phentsize));
-            if (phdr->p_type == PT_LOAD) {
-                if (phdr->p_vaddr < min_vaddr) {
-                    min_vaddr = phdr->p_vaddr;
-                    load_bias = baseMap.startAddress - _PAGE_START_OF_(min_vaddr);
+        // check common header values
+        if (!_ehdr.e_phnum || !_ehdr.e_phentsize || !_ehdr.e_shnum || !_ehdr.e_shentsize) {
+            KITTY_LOGD("ElfScanner: Invalid header values (%p).", (void*)elfBase);
+            return;
+        }
+
+        _phdr = elfBase + _ehdr.e_phoff;
+
+        // read all program headers
+        std::vector<char> phdrs_buf(_ehdr.e_phnum * _ehdr.e_phentsize);
+        if (!memcpy(&phdrs_buf[0], (const void*)_phdr, phdrs_buf.size())) {
+            KITTY_LOGD("ElfScanner: Failed to read ELF (%p) program headers.", (void*)elfBase);
+            return;
+        }
+
+        // find load bias
+        uintptr_t min_vaddr = UINTPTR_MAX, max_vaddr = 0;
+        uintptr_t load_vaddr = 0, load_memsz = 0, load_filesz = 0;
+        for (ElfW_(Half) i = 0; i < _ehdr.e_phnum; i++) {
+            ElfW_(Phdr) phdr_entry = {};
+            memcpy(&phdr_entry, phdrs_buf.data() + (i * _ehdr.e_phentsize), _ehdr.e_phentsize);
+            _phdrs.push_back(phdr_entry);
+
+            if (phdr_entry.p_type == PT_LOAD) {
+                _loads++;
+
+                load_vaddr = phdr_entry.p_vaddr;
+                load_memsz = phdr_entry.p_memsz;
+                load_filesz = phdr_entry.p_filesz;
+
+                if (phdr_entry.p_vaddr < min_vaddr)
+                    min_vaddr = phdr_entry.p_vaddr;
+
+                if (phdr_entry.p_vaddr + phdr_entry.p_memsz > max_vaddr)
+                    max_vaddr = phdr_entry.p_vaddr + phdr_entry.p_memsz;
+            }
+        }
+
+        if (!_loads) {
+            KITTY_LOGD("ElfScanner: No loads entry for ELF (%p).", (void*)elfBase);
+            return;
+        }
+
+        if (!max_vaddr) {
+            KITTY_LOGD("ElfScanner: Failed to find load size for ELF (%p).", (void*)elfBase);
+            return;
+        }
+
+        min_vaddr = KT_PAGE_START(min_vaddr);
+        max_vaddr = KT_PAGE_END(max_vaddr);
+
+        _loadBias = elfBase - min_vaddr;
+        _loadSize = max_vaddr - min_vaddr;
+
+        uintptr_t seg_start = load_vaddr + _loadBias;
+        uintptr_t seg_mem_end = KT_PAGE_END((seg_start + load_memsz));
+        uintptr_t seg_file_end = KT_PAGE_END((seg_start + load_filesz));
+        if (seg_mem_end > seg_file_end) {
+            _bss = seg_file_end;
+            _bssSize = size_t(seg_mem_end - seg_file_end);
+        }
+
+        // read all dynamics
+        for (auto& phdr : _phdrs) {
+            if (phdr.p_type == PT_DYNAMIC) {
+                _dynamic = _loadBias + phdr.p_vaddr;
+                std::vector<ElfW_(Dyn)> dyn_buff(phdr.p_memsz / sizeof(ElfW_(Dyn)));
+                if (!memcpy(&dyn_buff[0], (const void*)_dynamic, phdr.p_memsz)) {
+                    KITTY_LOGD("ElfScanner: Failed to read dynamic for ELF (%p).", (void*)elfBase);
+                    break;
                 }
-                loads++;
-            } else if (phdr->p_type == PT_DYNAMIC) {
-                auto *dyn_curr = reinterpret_cast<ElfW_(Dyn) *>(load_bias + phdr->p_vaddr);
-                auto *dyn_end = dyn_curr + (phdr->p_memsz / sizeof(ElfW_(Dyn)));
-                for (; dyn_curr && dyn_curr < dyn_end && dyn_curr->d_tag != DT_NULL; dyn_curr++) {
-                    switch (dyn_curr->d_tag) {
-                        case DT_STRTAB:   // string table
-                            strtab = dyn_curr->d_un.d_ptr;
-                            break;
-                        case DT_SYMTAB:   // symbol table
-                            symtab = dyn_curr->d_un.d_ptr;
-                            break;
-                        case DT_HASH:     // hash table
-                            elf_hash = dyn_curr->d_un.d_ptr;
-                            break;
-                        case DT_GNU_HASH: // gnu hash table
-                            gnu_hash = dyn_curr->d_un.d_ptr;
-                            break;
-                        case DT_STRSZ:    // string table size
-                            strsz = dyn_curr->d_un.d_val;
-                            break;
-                        case DT_SYMENT:   // symbol table entry size
-                            syment = dyn_curr->d_un.d_val;
-                            break;
-                        default:
-                            break;
+
+                for (auto& dyn : dyn_buff) {
+                    if (dyn.d_tag == DT_NULL)
+                        break;
+
+                    // set required dynamics for symbol lookup
+                    switch (dyn.d_tag) {
+                        // mandatory
+                    case DT_STRTAB: // string table
+                        _stringTable = dyn.d_un.d_ptr;
+                        break;
+                        // mandatory
+                    case DT_SYMTAB: // symbol table
+                        _symbolTable = dyn.d_un.d_ptr;
+                        break;
+                    case DT_HASH: // hash table
+                        _elfHashTable = dyn.d_un.d_ptr;
+                        break;
+                    case DT_GNU_HASH: // gnu hash table
+                        _gnuHashTable = dyn.d_un.d_ptr;
+                        break;
+                        // mandatory
+                    case DT_STRSZ: // string table size
+                        _strsz = dyn.d_un.d_val;
+                        break;
+                        // mandatory
+                    case DT_SYMENT: // symbol entry size
+                        _syment = dyn.d_un.d_val;
+                        break;
+                    default:
+                        break;
                     }
+
+                    _dynamics.push_back(dyn);
                 }
             }
         }
 
-        // Check that we have all program headers required for dynamic linking
-        if (!loads || !strtab || !symtab || !strsz || !syment) {
-            KITTY_LOGE("findSymbol: failed to require all program headers for dynamic linking.");
-            KITTY_LOGE("findSymbol: loads: %d | strtab=%p | symtab=%p", loads, (void *) strtab, (void *) symtab);
-            KITTY_LOGE("[%p - %p] \"%s\".", (void*)baseMap.startAddress, (void*)baseMap.endAddress, baseMap.pathname.c_str());
-            return 0;
+        // check required dynamics for symbol lookup
+        if (!_stringTable || !_symbolTable || !_strsz || !_syment) {
+            KITTY_LOGD("ElfScanner: Failed to require dynamics for symbol lookup.");
+            KITTY_LOGD("ElfScanner: elfBase: %p | strtab=%p | symtab=%p | strsz=%p | syment=%p",
+                (void*)elfBase, (void*)_stringTable, (void*)_symbolTable, (void*)_strsz, (void*)_syment);
+            return;
         }
 
-        auto fix_table_address = [&](uintptr_t &table_addr) {
-            if (table_addr && table_addr < load_bias) table_addr += load_bias;
-        };
-        auto get_sym_address = [&](const ElfW_(Sym) *sym_ent) -> uintptr_t {
-            return sym_ent->st_value < load_bias ? load_bias + sym_ent->st_value : sym_ent->st_value;
+        auto fix_table_address = [&](uintptr_t& table_addr) {
+            if (table_addr && table_addr < _loadBias)
+                table_addr += _loadBias;
         };
 
-        fix_table_address(strtab);
-        fix_table_address(symtab);
-        fix_table_address(elf_hash);
-        fix_table_address(gnu_hash);
+        fix_table_address(_stringTable);
+        fix_table_address(_symbolTable);
+        fix_table_address(_elfHashTable);
+        fix_table_address(_gnuHashTable);
+
+        bool fixBSS = !_bss;
+
+        for (auto& it : maps) {
+            if (it.startAddress >= _elfBase && it.endAddress <= (_elfBase + _loadSize)) {
+                _segments.push_back(it);
+                if (fixBSS && it.pathname == "[anon:.bss]") {
+                    if (!_bss)
+                        _bss = it.startAddress;
+
+                    _bssSize = it.endAddress - _bss;
+                }
+            }
+
+            if (it.endAddress > (_elfBase + _loadSize))
+                break;
+        }
+
+        if (!_segments.empty())
+            _base_segment = _segments.front();
+    }
+
+    uintptr_t ElfScanner::findSymbol(const std::string& symbolName) const
+    {
+        if (!isValid()) return 0;
+
+        auto get_sym_address = [&](const ElfW_(Sym) *sym_ent) -> uintptr_t {
+            return sym_ent->st_value < _loadBias ? _loadBias + sym_ent->st_value : sym_ent->st_value;
+        };
 
         // try gnu hash first
-        if (gnu_hash) {
-            const auto *sym = KittyUtils::Elf::GnuHash::LookupByName(gnu_hash, symtab, strtab, syment, strsz, symbol_name.c_str());
+        if (_gnuHashTable) {
+            const auto *sym = KittyUtils::Elf::GnuHash::LookupByName(_gnuHashTable, _symbolTable, _stringTable, _syment, _strsz, symbolName.c_str());
             if (sym && sym->st_value) {
                 return get_sym_address(sym);
             }
         }
 
-        if (elf_hash) {
-            const auto *sym = KittyUtils::Elf::ElfHash::LookupByName(elf_hash, symtab, strtab, syment, strsz, symbol_name.c_str());
+        if (_elfHashTable) {
+            const auto *sym = KittyUtils::Elf::ElfHash::LookupByName(_elfHashTable, _symbolTable, _stringTable, _syment, _strsz, symbolName.c_str());
             if (sym && sym->st_value) {
                 return get_sym_address(sym);
             }
         }
-
-#if 0
-        // linear search
-        uintptr_t sym_entry = symtab;
-        for (; sym_entry; sym_entry += syment) {
-            const auto *curr_sym = reinterpret_cast<const ElfW_(Sym) *>(sym_entry);
-            if (curr_sym->st_name >= strsz)
-                break;
-
-            if (!curr_sym->st_name || !curr_sym->st_value)
-                continue;
-
-            std::string sym_str = std::string((const char *) (strtab + curr_sym->st_name));
-            if (!sym_str.empty() && sym_str == symbol_name)
-                return get_sym_address(curr_sym);
-        }
-#endif
 
         return 0;
     }
 
-    uintptr_t findSymbol(uintptr_t libBase, const std::string &symbol_name)
+    std::vector<ElfScanner> ElfScanner::getAllELFs()
     {
-        auto baseMap = KittyMemory::getAddressMap((void*) libBase);
-        if (!baseMap.isValid()) {
-            KITTY_LOGE("findSymbol: Couldn't find map of address (%p).", (void*)libBase);
-            return 0;
-        }
-        return findSymbol(baseMap, symbol_name);
-    }
-
-    uintptr_t findSymbol(const std::string &lib, const std::string &symbol_name)
-    {
-        auto baseMap = KittyMemory::getElfBaseMap(lib);
-        if (!baseMap.isValid()) {
-            KITTY_LOGE("findSymbol: Couldn't find base map of \"%s\".", lib.c_str());
-            return 0;
-        }
-        return findSymbol(baseMap, symbol_name);
-    }
-
-    std::vector<std::pair<uintptr_t, std::string>> findSymbolAll(const std::string &symbol_name)
-    {
-        std::vector<std::pair<uintptr_t, std::string>> ret{};
+        std::vector<ElfScanner> elfs;
 
         auto maps = KittyMemory::getAllMaps();
         if (maps.empty()) {
-            KITTY_LOGE("findSymbolAll: Failed to get process maps.");
-            return ret;
+            KITTY_LOGE("getAllELFs: Failed to get process maps.");
+            return elfs;
         }
 
         std::map<uintptr_t , bool> checkedMaps{};
@@ -393,7 +480,7 @@ namespace KittyScanner
             if (checkedMaps.count(it.startAddress) > 0)
                 continue;
 
-            if (it.isUnknown() || !it.is_private || !it.isValidELF())
+            if (!it.readable || it.offset != 0 || it.isUnknown() || it.inode == 0 || !it.is_private || !it.isValidELF())
                 continue;
 
             // skip dladdr check for linker/linker64
@@ -413,10 +500,21 @@ namespace KittyScanner
             }
 
             checkedMaps[it.startAddress] = true;
+            elfs.push_back(ElfScanner(it.startAddress, maps));
+        }
 
-            uintptr_t sym = KittyScanner::findSymbol(it, symbol_name);
+        return elfs;
+    }
+
+    std::vector<std::pair<uintptr_t, ElfScanner>> ElfScanner::findSymbolAll(const std::string &symbolName)
+    {
+        std::vector<std::pair<uintptr_t, ElfScanner>> ret{};
+
+        auto elfs = getAllELFs();
+        for (auto &it: elfs) {
+            uintptr_t sym = it.findSymbol(symbolName);
             if (sym != 0) {
-                ret.emplace_back(sym, it.pathname);
+                ret.emplace_back(sym, it);
             }
         }
 

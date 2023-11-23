@@ -52,7 +52,7 @@ MemoryPatch MemoryPatch::createWithHex(uintptr_t absolute_address, std::string h
 {
   MemoryPatch patch;
 
-  if (!absolute_address || !KittyUtils::validateHexString(hex))
+  if (!absolute_address || !KittyUtils::String::ValidateHex(hex))
     return patch;
 
   patch._address = absolute_address;

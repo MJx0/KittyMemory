@@ -16,7 +16,7 @@ struct MemPatches
     // etc...
 } gPatches;
 
-ProcMap g_il2cppBaseMap;
+ElfScanner g_il2cppELF;
 
 void test_thread()
 {
@@ -29,35 +29,55 @@ void test_thread()
 
     // symbol lookup by name
     const char *lib_egl = KittyMemory::getMapsEndWith("/nb/libEGL.so").empty() ? "libEGL.so" : "/nb/libEGL.so";
-    uintptr_t p_eglSwapBuffers = KittyScanner::findSymbol(lib_egl, "eglSwapBuffers");
+    
+    uintptr_t p_eglSwapBuffers = ElfScanner::createWithPath(lib_egl).findSymbol("eglSwapBuffers");
     KITTY_LOGI("eglSwapBuffers = %p", (void *)p_eglSwapBuffers);
 
     // symbol lookup by name in all loaded shared objects
-    auto v_eglSwapBuffers = KittyScanner::findSymbolAll("eglSwapBuffers");
+    auto v_eglSwapBuffers = ElfScanner::findSymbolAll("eglSwapBuffers");
     for (auto &it : v_eglSwapBuffers)
     {
         // first  = symbol address
-        // second = library pathname
-        KITTY_LOGI("Found %s at %p from %s", "eglSwapBuffers", (void *)it.first, it.second.c_str());
+        // second = ELF object
+        KITTY_LOGI("Found %s at %p from %s", "eglSwapBuffers", (void *)it.first, it.second.filePath().c_str());
     }
 
-    KITTY_LOGI("==================== GET ELF BASE ===================");
+    KITTY_LOGI("==================== GET ELF INFO ===================");
 
     // loop until our target library is found
     do
     {
         sleep(1);
         // getElfBaseMap can also find lib base even if it was loaded from zipped base.apk
-        g_il2cppBaseMap = KittyMemory::getElfBaseMap("libil2cpp.so");
-    } while (!g_il2cppBaseMap.isValid());
-    KITTY_LOGI("il2cpp base: %p", (void *)(g_il2cppBaseMap.startAddress));
+        g_il2cppELF = ElfScanner::createWithPath("libil2cpp.so");
+    } while (!g_il2cppELF.isValid());
+
+    KITTY_LOGI("il2cpp path: %s", g_il2cppELF.filePath().c_str());
+    KITTY_LOGI("il2cpp base: %p", (void*)(g_il2cppELF.base()));
+    KITTY_LOGI("il2cpp load_bias: %p", (void*)(g_il2cppELF.loadBias()));
+    KITTY_LOGI("il2cpp load_size: %p", (void*)(g_il2cppELF.loadSize()));
+    KITTY_LOGI("il2cpp end: %p", (void*)(g_il2cppELF.end()));
+    KITTY_LOGI("il2cpp phdr: %p", (void*)(g_il2cppELF.phdr()));
+    KITTY_LOGI("il2cpp phdrs count: %d", int(g_il2cppELF.programHeaders().size()));
+    KITTY_LOGI("il2cpp dynamic: %p", (void*)(g_il2cppELF.dynamic()));
+    KITTY_LOGI("il2cpp dynamics count: %d", int(g_il2cppELF.dynamics().size()));
+    KITTY_LOGI("il2cpp strtab: %p", (void*)(g_il2cppELF.stringTable()));
+    KITTY_LOGI("il2cpp symtab: %p", (void*)(g_il2cppELF.symbolTable()));
+    KITTY_LOGI("il2cpp elfhash: %p", (void*)(g_il2cppELF.elfHashTable()));
+    KITTY_LOGI("il2cpp gnuhash: %p", (void*)(g_il2cppELF.gnuHashTable()));
+    KITTY_LOGI("il2cpp .bss: %p", (void*)(g_il2cppELF.bss()));
+    KITTY_LOGI("il2cpp segments count: %d", int(g_il2cppELF.segments().size()));
 
     // wait more to make sure lib is fully loaded and ready
     sleep(1);
 
+    // test
+    KITTY_LOGI("il2cpp_init: %p", (void *)(g_il2cppELF.findSymbol("il2cpp_init")));
+    KITTY_LOGI("il2cpp_string_new: %p", (void *)(g_il2cppELF.findSymbol("il2cpp_string_new")));
+
     KITTY_LOGI("==================== MEMORY PATCH ===================");
 
-    uintptr_t il2cppBase = g_il2cppBaseMap.startAddress;
+    uintptr_t il2cppBase = g_il2cppELF.base();
 
     // with bytes, must specify bytes count
     gPatches.get_canShoot = MemoryPatch::createWithBytes(il2cppBase + 0x10948D4, "\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1", 8);
@@ -72,7 +92,7 @@ void test_thread()
     gPatches.get_canShoot = MemoryPatch::createWithAsm(il2cppBase + 0x10948D4, MP_ASM_ARM64, "mov x0, #1; ret");
 
     // format asm
-    auto asm_fmt = KittyUtils::strfmt("mov x0, #%d; ret", 65536);
+    auto asm_fmt = KittyUtils::String::Fmt("mov x0, #%d; ret", 65536);
     gPatches.get_gold = MemoryPatch::createWithAsm(il2cppBase + 0x10948D4, MP_ASM_ARM64, asm_fmt);
 
     KITTY_LOGI("Patch Address: %p", (void *)gPatches.get_canShoot.get_TargetAddress());
@@ -114,8 +134,8 @@ void test_thread()
     uintptr_t found_at = 0;
     std::vector<uintptr_t> found_at_list;
 
-    uintptr_t search_start = g_il2cppBaseMap.startAddress;
-    uintptr_t search_end = g_il2cppBaseMap.endAddress;
+    uintptr_t search_start = g_il2cppELF.baseSegment().startAddress;
+    uintptr_t search_end = g_il2cppELF.baseSegment().endAddress;
 
     // scan with direct bytes & get one result
     found_at = KittyScanner::findBytesFirst(search_start, search_end, "\x33\x44\x55\x66\x00\x77\x88\x00\x99", "xxxx??x?x");
@@ -150,15 +170,40 @@ void test_thread()
     KITTY_LOGI("====================== HEX DUMP =====================");
 
     // hex dump by default 8 rows with ASCII
-    KITTY_LOGI("\n%s", KittyUtils::HexDump((void *)g_il2cppBaseMap.startAddress, 100).c_str());
+    KITTY_LOGI("\n%s", KittyUtils::HexDump((void *)g_il2cppELF.baseSegment().startAddress, 100).c_str());
 
     KITTY_LOGI("=====================================================");
 
     // 16 rows, no ASCII
-    KITTY_LOGI("\n%s", KittyUtils::HexDump<16, false>((void *)g_il2cppBaseMap.startAddress, 100).c_str());
+    KITTY_LOGI("\n%s", KittyUtils::HexDump<16, false>((void *)g_il2cppELF.baseSegment().startAddress, 100).c_str());
 }
 
 __attribute__((constructor)) void init()
 {
     std::thread(test_thread).detach();
+}
+
+#include <jni.h>
+
+extern "C" jint JNIEXPORT JNI_OnLoad(JavaVM* vm, void *key)
+{
+    KITTY_LOGI("========================");
+    KITTY_LOGI("JNI_OnLoad(%p, %p)", vm, key);
+
+    // check if called by injector
+    if (key != (void*)1337)
+        return JNI_VERSION_1_6;
+
+    KITTY_LOGI("JNI_OnLoad called by injector.");
+
+    JNIEnv *env = nullptr;
+    if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_OK)
+    {
+        KITTY_LOGI("JavaEnv: %p.", env);
+        // ...
+    }
+    
+    std::thread(test_thread).detach();
+    
+    return JNI_VERSION_1_6;
 }

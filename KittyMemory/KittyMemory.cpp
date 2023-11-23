@@ -19,16 +19,18 @@ extern "C" kern_return_t mach_vm_remap(vm_map_t, mach_vm_address_t *, mach_vm_si
 
 namespace KittyMemory {
 
-    int setAddressProtection(void *address, size_t length, int protection)
+    int setAddressProtection(const void *address, size_t length, int protection)
     {
-        uintptr_t pageStart = _PAGE_START_OF_(address);
-        uintptr_t pageLen = _PAGE_LEN_OF_(address, length);
+        uintptr_t pageStart = KT_PAGE_START(address);
+        uintptr_t pageLen = KT_PAGE_LEN2(address, length);
         int ret = mprotect(reinterpret_cast<void *>(pageStart), pageLen, protection);
         KITTY_LOGD("mprotect(%p, %zu, %d) = %d", address, length, protection, ret);
         return ret;
     }
 
-    bool memRead(const void *address, void *buffer, size_t len)
+#ifdef __ANDROID__
+
+    bool memRead(const void* address, void* buffer, size_t len)
     {
         KITTY_LOGD("memRead(%p, %p, %zu)", address, buffer, len);
 
@@ -43,15 +45,37 @@ namespace KittyMemory {
         }
 
         if (!len) {
-            KITTY_LOGE("memWrite err invalid len");
+            KITTY_LOGE("memRead err invalid len");
+            return false;
+        }
+
+        ProcMap addressMap = getAddressMap(address);
+        if (!addressMap.isValid()) {
+            KITTY_LOGE("memRead err couldn't find address (%p) in any map", address);
+            return false;
+        }
+
+        if (addressMap.protection & PROT_READ) {
+            memcpy(buffer, address, len);
+            return true;
+        }
+
+        if (setAddressProtection(address, len, addressMap.protection | PROT_READ) != 0) {
+            KITTY_LOGE("memRead err couldn't add write perm to address (%p, len: %zu, prot: %d)",
+                address, len, addressMap.protection);
             return false;
         }
 
         memcpy(buffer, address, len);
+
+        if (setAddressProtection(address, len, addressMap.protection) != 0) {
+            KITTY_LOGE("memRead err couldn't revert protection of address (%p, len: %zu, prot: %d)",
+                address, len, addressMap.protection);
+            return false;
+        }
+
         return true;
     }
-
-#ifdef __ANDROID__
 
     bool memWrite(void *address, const void *buffer, size_t len)
     {
@@ -171,7 +195,7 @@ namespace KittyMemory {
         return retMaps;
     }
 
-    std::vector<ProcMap> getMapsEqual(const std::string& name)
+    std::vector<ProcMap> getMapsEqual(const std::vector<ProcMap> &maps, const std::string& name)
     {
         if (name.empty()) return {};
 
@@ -179,7 +203,6 @@ namespace KittyMemory {
 
         std::vector<ProcMap> retMaps;
 
-        auto maps = getAllMaps();
         for(auto &it : maps) {
             if (it.isValid() && !it.isUnknown() && it.pathname == name) {
                 retMaps.push_back(it);
@@ -189,7 +212,7 @@ namespace KittyMemory {
         return retMaps;
     }
 
-    std::vector<ProcMap> getMapsContain(const std::string &name)
+    std::vector<ProcMap> getMapsContain(const std::vector<ProcMap> &maps, const std::string &name)
     {
         if (name.empty()) return {};
 
@@ -197,7 +220,6 @@ namespace KittyMemory {
 
         std::vector<ProcMap> retMaps;
 
-        auto maps = getAllMaps();
         for(auto &it : maps) {
             if (it.isValid() && !it.isUnknown() && strstr(it.pathname.c_str(), name.c_str())) {
                 retMaps.push_back(it);
@@ -207,7 +229,7 @@ namespace KittyMemory {
         return retMaps;
     }
 
-    std::vector<ProcMap> getMapsEndWith(const std::string &name)
+    std::vector<ProcMap> getMapsEndWith(const std::vector<ProcMap> &maps, const std::string &name)
     {
         if (name.empty()) return {};
 
@@ -215,9 +237,8 @@ namespace KittyMemory {
 
         std::vector<ProcMap> retMaps;
 
-        auto maps = getAllMaps();
         for(auto &it : maps) {
-            if (it.isValid() && !it.isUnknown() && KittyUtils::string_endswith(it.pathname, name)) {
+            if (it.isValid() && !it.isUnknown() && KittyUtils::String::EndsWith(it.pathname, name)) {
                 retMaps.push_back(it);
             }
         }
@@ -225,7 +246,7 @@ namespace KittyMemory {
         return retMaps;
     }
 
-    ProcMap getAddressMap(const void *address)
+    ProcMap getAddressMap(const std::vector<ProcMap> &maps, const void *address)
     {
         KITTY_LOGD("getAddressMap(%p)", address);
 
@@ -233,7 +254,6 @@ namespace KittyMemory {
 
         ProcMap retMap{};
 
-        auto maps = getAllMaps();
         for(auto &it : maps) {
             if (it.isValid() && it.contains((uintptr_t)address)) {
                 retMap = it;
@@ -264,8 +284,10 @@ namespace KittyMemory {
             isZippedInAPK = true;
         }
 
-        for (auto &it: maps) {
-            if (it.isUnknown() || !it.is_private || !it.isValidELF()) continue;
+        for (auto &it: maps)
+        {
+            if (!it.readable || it.offset != 0 || it.isUnknown() || it.inode == 0 || !it.is_private || !it.isValidELF())
+                continue;
 
             // skip dladdr check for linker/linker64
             if (strstr(it.pathname.c_str(), "/bin/linker")) {
@@ -285,7 +307,7 @@ namespace KittyMemory {
             }
 
             // if library is zipped inside base.apk, compare dli_fname and fix pathname
-            if (KittyUtils::string_endswith(info.dli_fname, name)) {
+            if (KittyUtils::String::EndsWith(info.dli_fname, name)) {
                 retMap = it;
                 retMap.pathname = info.dli_fname;
                 break;
@@ -306,6 +328,29 @@ namespace KittyMemory {
       return vm_region_recurse_64(mach_task_self(), &region, &region_len,
                                   &depth, (vm_region_recurse_info_t)info_out,
                                   &info_count);
+    }
+
+    bool memRead(const void *address, void *buffer, size_t len)
+    {
+        KITTY_LOGD("memRead(%p, %p, %zu)", address, buffer, len);
+
+        if (!address) {
+            KITTY_LOGE("memRead err address (%p) is null", address);
+            return false;
+        }
+
+        if (!buffer) {
+            KITTY_LOGE("memRead err buffer (%p) is null", buffer);
+            return false;
+        }
+
+        if (!len) {
+            KITTY_LOGE("memRead err invalid len");
+            return false;
+        }
+
+        memcpy(buffer, address, len);
+        return true;
     }
 
     /*
@@ -332,9 +377,9 @@ namespace KittyMemory {
             return KMS_INV_LEN;
         }
 
-        void *page_start = reinterpret_cast<void *>(_PAGE_START_OF_(address));
-        void *page_offset = reinterpret_cast<void *>(_PAGE_OFFSET_OF_(address));
-        size_t page_len = _PAGE_LEN_OF_(address, len);
+        void *page_start = reinterpret_cast<void *>(KT_PAGE_START(address));
+        void *page_offset = reinterpret_cast<void *>(KT_PAGE_OFFSET(address));
+        size_t page_len = KT_PAGE_LEN2(address, len);
 
         vm_region_submap_short_info_64 page_info;
         if (getPageInfo(page_start, &page_info) != KERN_SUCCESS) {
@@ -416,7 +461,11 @@ namespace KittyMemory {
 
             // first executable
             _info.index = i;
+#ifdef __LP64__
+            _info.header = (const mach_header_64*)_dyld_get_image_header(i);
+#else
             _info.header = _dyld_get_image_header(i);
+#endif
             _info.name = _dyld_get_image_name(i);
             _info.address = _dyld_get_image_vmaddr_slide(i);
 
@@ -438,12 +487,15 @@ namespace KittyMemory {
             if (!name) continue;
 
             std::string fullpath(name);
-
-            if (!KittyUtils::string_endswith(fullpath, fileName))
+            if (!KittyUtils::String::EndsWith(fullpath, fileName))
                 continue;
 
             _info.index = i;
+#ifdef __LP64__
+            _info.header = (const mach_header_64*)_dyld_get_image_header(i);
+#else
             _info.header = _dyld_get_image_header(i);
+#endif
             _info.name = _dyld_get_image_name(i);
             _info.address = _dyld_get_image_vmaddr_slide(i);
 

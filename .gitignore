@@ -2,6 +2,10 @@
 
 .vscode/
 
+.cache/
+
+build/
+
 .theos/
 rootless/
 rootful/

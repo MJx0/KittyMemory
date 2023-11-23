@@ -7,6 +7,8 @@
 #include <iomanip>
 #include <cstdarg>
 #include <vector>
+#include <utility>
+#include <random>
 
 #ifdef __ANDROID__
 
@@ -27,37 +29,52 @@
 
 namespace KittyUtils {
 
-    #ifdef __ANDROID__
-    static inline std::string getExternalStorage()
-    {
-        char *storage = getenv("EXTERNAL_STORAGE");
-        return storage ? storage : "/sdcard";
-    }
+#ifdef __ANDROID__
+    std::string getExternalStorage();
+    int getAndroidVersion();
+    int getAndroidSDK();
 #endif
 
     std::string fileNameFromPath(const std::string &filePath);
     std::string fileDirectory(const std::string &filePath);
     std::string fileExtension(const std::string &filePath);
 
-    static inline bool string_startswith(const std::string &str, const std::string &str2)
+    namespace String
     {
-        return str.length() >= str2.length() && str.compare(0, str2.length(), str2) == 0;
-    }
+        static inline bool StartsWith(const std::string &str, const std::string &str2)
+        {
+            return str.length() >= str2.length() && str.compare(0, str2.length(), str2) == 0;
+        }
+        
+        static inline bool Contains(const std::string &str, const std::string &str2)
+        {
+            return str.length() >= str2.length() && str.find(str2) != std::string::npos;
+        }
+        
+        static inline bool EndsWith(const std::string &str, const std::string &str2)
+        {
+            return str.length() >= str2.length() && str.compare(str.length() - str2.length(), str2.length(), str2) == 0;
+        }
+        
+        void Trim(std::string &str);
 
-    static inline bool string_contains(const std::string &str, const std::string &str2)
+        bool ValidateHex(std::string &hex);
+
+        std::string Fmt(const char *fmt, ...);
+
+        std::string Random(size_t length);
+    } // namespace String
+
+    template <typename T>
+    T randInt(T min, T max)
     {
-        return str.length() >= str2.length() && str.find(str2) != std::string::npos;
+        using param_type = typename std::uniform_int_distribution<T>::param_type;
+
+        thread_local static std::mt19937 gen{std::random_device{}()};
+        thread_local static std::uniform_int_distribution<T> dist;
+
+        return dist(gen, param_type{min, max});
     }
-
-    static inline bool string_endswith(const std::string &str, const std::string &str2)
-    {
-        return str.length() >= str2.length() && str.compare(str.length() - str2.length(), str2.length(), str2) == 0;
-    }
-
-    void trim_string(std::string &str);
-    bool validateHexString(std::string &hex);
-
-    std::string strfmt(const char *fmt, ...);
 
     template <typename T> std::string data2Hex(const T &data)
     {

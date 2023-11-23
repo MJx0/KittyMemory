@@ -1,3 +1,4 @@
+#include <sys/_types/_uintptr_t.h>
 #include <thread>
 #include <string>
 #include <cstdint>
@@ -64,7 +65,7 @@ void test_thread()
     gPatches.get_canShoot = MemoryPatch::createWithAsm(unityBase + 0x10948D4, MP_ASM_ARM64, "mov x0, #1; ret");
 
     // format asm
-    std::string asm_fmt = KittyUtils::strfmt("mov x0, #%d; ret", 65536);
+    std::string asm_fmt = KittyUtils::String::Fmt("mov x0, #%d; ret", 65536);
     gPatches.get_gold = MemoryPatch::createWithAsm(unityBase + 0x19C5D1C, MP_ASM_ARM64, asm_fmt);
 
     KITTY_LOGI("Patch Address: %p", (void *)gPatches.get_canShoot.get_TargetAddress());
@@ -99,60 +100,54 @@ void test_thread()
 
     // scan within a memory range for bytes with mask x and ?
 
-    const mach_header_64 *some_binary_header = (const mach_header_64 *)g_BaseInfo.header;
-
     // get start & end address of __TEXT segment
-    unsigned long text_seg_size = 0;
-    uintptr_t text_scan_start = (uintptr_t)getsegmentdata(some_binary_header, "__TEXT", &text_seg_size);
-    uintptr_t text_scan_end = text_scan_start + text_seg_size;
+    seg_data_t text_seg = g_BaseInfo.getSegment("__TEXT");
 
     // get start & end address of __DATA segment
-    unsigned long data_seg_size = 0;
-    uintptr_t data_scan_start = (uintptr_t)getsegmentdata(some_binary_header, "__DATA", &data_seg_size);
-    uintptr_t data_scan_end = data_scan_start + data_seg_size;
+    seg_data_t data_seg = g_BaseInfo.getSegment("__DATA");
 
     uintptr_t found_at = 0;
     std::vector<uintptr_t> found_at_list;
 
     // scan with direct bytes & get one result
-    found_at = KittyScanner::findBytesFirst(text_scan_start, text_scan_end, "\x33\x44\x55\x66\x00\x77\x88\x00\x99", "xxxx??x?x");
+    found_at = KittyScanner::findBytesFirst(text_seg.start, text_seg.end, "\x33\x44\x55\x66\x00\x77\x88\x00\x99", "xxxx??x?x");
     KITTY_LOGI("found bytes at: %p", (void *)found_at);
     // scan with direct bytes & get all results
-    found_at_list = KittyScanner::findBytesAll(text_scan_start, text_scan_end, "\x33\x44\x55\x66\x00\x77\x88\x00\x99", "xxxx??x?x");
+    found_at_list = KittyScanner::findBytesAll(text_seg.start, text_seg.end, "\x33\x44\x55\x66\x00\x77\x88\x00\x99", "xxxx??x?x");
     KITTY_LOGI("found bytes results: %zu", found_at_list.size());
 
     // scan with hex & get one result
-    found_at = KittyScanner::findHexFirst(text_scan_start, text_scan_end, "33 44 55 66 00 77 88 00 99", "xxxx??x?x");
+    found_at = KittyScanner::findHexFirst(text_seg.start, text_seg.end, "33 44 55 66 00 77 88 00 99", "xxxx??x?x");
     KITTY_LOGI("found hex at: %p", (void *)found_at);
     // scan with hex & get all results
-    found_at_list = KittyScanner::findHexAll(text_scan_start, text_scan_end, "33 44 55 66 00 77 88 00 99", "xxxx??x?x");
+    found_at_list = KittyScanner::findHexAll(text_seg.start, text_seg.end, "33 44 55 66 00 77 88 00 99", "xxxx??x?x");
     KITTY_LOGI("found hex results: %zu", found_at_list.size());
 
         // scan with IDA pattern get one result
-    found_at = KittyScanner::findIdaPatternFirst(text_scan_start, text_scan_end, "33 ? 55 66 ? 77 88 ? 99");
+    found_at = KittyScanner::findIdaPatternFirst(text_seg.start, text_seg.end, "33 ? 55 66 ? 77 88 ? 99");
     KITTY_LOGI("found IDA pattern at: %p", (void *)found_at);
     // scan with IDA pattern get all results
-    found_at_list = KittyScanner::findIdaPatternAll(text_scan_start, text_scan_end, "33 ? 55 66 ? 77 88 ? 99");
+    found_at_list = KittyScanner::findIdaPatternAll(text_seg.start, text_seg.end, "33 ? 55 66 ? 77 88 ? 99");
     KITTY_LOGI("found IDA pattern results: %zu", found_at_list.size());
 
     // scan with data type & get one result
     uint32_t data = 0x99887766;
-    found_at = KittyScanner::findDataFirst(data_scan_start, data_scan_end, &data, sizeof(data));
+    found_at = KittyScanner::findDataFirst(data_seg.start, data_seg.end, &data, sizeof(data));
     KITTY_LOGI("found data at: %p", (void *)found_at);
 
     // scan with data type & get all results
-    found_at_list = KittyScanner::findDataAll(data_scan_start, data_scan_end, &data, sizeof(data));
+    found_at_list = KittyScanner::findDataAll(data_seg.start, data_seg.end, &data, sizeof(data));
     KITTY_LOGI("found data results: %zu", found_at_list.size());
 
     KITTY_LOGI("================= HEX DUMP =================");
 
     // hex dump by default 8 rows with ASCII
-    KITTY_LOGI("\n%s", KittyUtils::HexDump(some_binary_header, 100).c_str());
+    KITTY_LOGI("\n%s", KittyUtils::HexDump(g_BaseInfo.header, sizeof(*g_BaseInfo.header)).c_str());
 
     KITTY_LOGI("============================================");
 
     // 16 rows, no ASCII
-    KITTY_LOGI("\n%s", KittyUtils::HexDump<16, false>(some_binary_header, 100).c_str());
+    KITTY_LOGI("\n%s", KittyUtils::HexDump<16, false>(g_BaseInfo.header, sizeof(*g_BaseInfo.header)).c_str());
 }
 
 __attribute__((constructor)) void init()
