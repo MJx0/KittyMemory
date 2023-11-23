@@ -28,3 +28,8 @@ namespace KittyArm64
 	bool decode_ldrstr_uimm(uint32_t insn, int32_t *offset);
 
 }
+
+namespace KittyArm
+{
+	int32_t decode_ldr_literal(uint32_t insn);
+}
