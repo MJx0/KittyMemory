@@ -125,3 +125,11 @@ namespace KittyArm64
 	}
 
 }
+
+namespace KittyArm
+{
+	int32_t decode_ldr_literal(uint32_t insn)
+	{
+		return KittyArm64::bits_from(insn, 0, 12);
+	}
+}
