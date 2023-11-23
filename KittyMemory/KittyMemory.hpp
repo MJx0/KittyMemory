@@ -205,19 +205,19 @@ namespace KittyMemory
 
       inline seg_data_t getSegment(const char *seg_name) const
       {
-        seg_data_t data;
+        seg_data_t data {};
         if (!header || !seg_name) return data;
         data.start = uintptr_t(getsegmentdata(header, seg_name, &data.size));
-        data.end = data.start + data.end;
+        data.end = data.start + data.size;
         return data;
       }
 
       inline seg_data_t getSection(const char *seg_name, const char *sect_name) const
       {
-        seg_data_t data;
+        seg_data_t data {};
         if (!header || !seg_name || !sect_name) return data;
         data.start = uintptr_t(getsectiondata(header, seg_name, sect_name, &data.size));
-        data.end = data.start + data.end;
+        data.end = data.start + data.size;
         return data;
       }
     };
