@@ -10,7 +10,7 @@ See how to use KittyMemory in [example.cpp](example.cpp).
 <h3>Clone:</h3>
 
 ```
-git clone --recursive https://github.com/MJx0/AndKittyInjector.git
+git clone --recursive https://github.com/MJx0/KittyMemory.git
 ```
 
 <h3>How to build:</h3>
