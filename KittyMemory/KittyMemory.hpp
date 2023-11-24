@@ -24,7 +24,7 @@
 #define KT_PAGE_SIZE (sysconf(_SC_PAGE_SIZE))
 
 #define KT_PAGE_START(x) (uintptr_t(x) & ~(KT_PAGE_SIZE - 1))
-#define KT_PAGE_END(x) (KT_PAGE_START(x + KT_PAGE_SIZE - 1))
+#define KT_PAGE_END(x) (KT_PAGE_START(uintptr_t(x) + KT_PAGE_SIZE - 1))
 #define KT_PAGE_OFFSET(x) (uintptr_t(x) - KT_PAGE_START(x))
 #define KT_PAGE_LEN(x) (size_t(KT_PAGE_SIZE - KT_PAGE_OFFSET(x)))
 
