@@ -10,20 +10,20 @@ See how to use KittyMemory in [Tweak.mm](Tweak.mm).
 
 - In your tweak Makefile somewhere at top, define:
 
-```
+```make
 KITTYMEMORY_PATH = path/to/KittyMemory
 KITTYMEMORY_SRC = $(wildcard $(KITTYMEMORY_PATH)/*.cpp)
 ```
 
 - Add KittyMemory source files to your tweak files:
 
-```
+```make
 $(TWEAK_NAME)_FILES = Tweak.mm $(KITTYMEMORY_SRC)
 ```
 
 - Finally add keystone static lib to your tweak obj files:
 
-```
+```make
 $(TWEAK_NAME)_OBJ_FILES = $(KITTYMEMORY_PATH)/Deps/Keystone/libs-ios/$(THEOS_CURRENT_ARCH)/libkeystone.a
 ```
 
