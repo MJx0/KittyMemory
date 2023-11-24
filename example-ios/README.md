@@ -6,6 +6,12 @@ Requires C++11 or above.
 
 See how to use KittyMemory in [Tweak.mm](Tweak.mm).
 
+<h3>Clone:</h3>
+
+```
+git clone --recursive https://github.com/MJx0/KittyMemory.git
+```
+
 <h3>How to build:</h3>
 
 - In your tweak Makefile somewhere at top, define:
