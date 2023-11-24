@@ -120,7 +120,7 @@ namespace KittyScanner
     /**
      * search for string "name" references to find the JNINativeMethod array
      */
-    RegisterNativeFn findRegisterNativeFn(const std::vector<KittyMemory::ProcMap> &maps, const std::string &name);
+    RegisterNativeFn findRegisterNativeFn(const class ElfScanner &elf, const std::string &name);
 
     class ElfScanner
     {

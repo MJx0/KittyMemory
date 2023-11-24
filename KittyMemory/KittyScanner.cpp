@@ -195,34 +195,28 @@ namespace KittyScanner
 
 #ifdef __ANDROID__
 
-    RegisterNativeFn findRegisterNativeFn(const std::vector<KittyMemory::ProcMap> &maps, const std::string &name)
+    RegisterNativeFn findRegisterNativeFn(const class ElfScanner &elf, const std::string &name)
     {
         uintptr_t string_loc = 0, string_xref = 0, fn_loc = 0;
         RegisterNativeFn fn;
 
-        if (name.empty() || maps.empty())
+        if (name.empty() || !elf.isValid())
             return fn;
         
-        for (auto &it : maps) {
-            if (it.isValidELF()) {
-                string_loc = KittyScanner::findDataFirst(it.startAddress, it.endAddress, name.data(), name.length());
-                if (string_loc) break;
-            }
-        }
-
+        string_loc = KittyScanner::findDataFirst(elf.baseSegment().startAddress, elf.baseSegment().endAddress, name.data(), name.length());
         if (!string_loc) {
-            KITTY_LOGE("couldn't find string (%s) in selected maps", name.c_str());
+            KITTY_LOGE("findRegisterNativeFn: Couldn't find string (%s) in selected maps", name.c_str());
             return fn;
         }
 
-        KITTY_LOGD("string (%s) at %p", name.c_str(), (void*)string_loc);
+        KITTY_LOGD("findRegisterNativeFn: String (%s) at %p", name.c_str(), (void*)string_loc);
 
-        for (auto &it : maps) {
+        for (auto &it : elf.segments()) {
             if (it.is_rw) {
                 string_xref = KittyScanner::findDataFirst(it.startAddress, it.endAddress, &string_loc, sizeof(uintptr_t));
                 if (!string_xref) continue;
 
-                KITTY_LOGD("string at (%p) referenced at %p", (void *)string_loc, (void *)string_xref);
+                KITTY_LOGD("findRegisterNativeFn: String at (%p) referenced at %p", (void *)string_loc, (void *)string_xref);
                 
                 fn_loc = string_xref;
                 break;

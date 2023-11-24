@@ -115,17 +115,21 @@ void test_thread()
 
     KITTY_LOGI("=============== FIND NATIVE REGISTERS ===============");
 
-    // get all maps of unity lib
-    std::vector<ProcMap> unityMaps = KittyMemory::getMapsEndWith("libunity.so");
+    // get loaded unity ELF
+    auto unityELF = ElfScanner::createWithPath("libunity.so");
 
     // finding register native functions
-    RegisterNativeFn nativeInjectEvent = KittyScanner::findRegisterNativeFn(unityMaps, "nativeInjectEvent");
+    RegisterNativeFn nativeInjectEvent = KittyScanner::findRegisterNativeFn(unityELF, "nativeInjectEvent");
     if (nativeInjectEvent.isValid())
         KITTY_LOGI("nativeInjectEvent = { %s, %s, %p }", nativeInjectEvent.name, nativeInjectEvent.signature, nativeInjectEvent.fnPtr);
+    else
+        KITTY_LOGI("nativeInjectEvent = NULL");
 
-    RegisterNativeFn nativeUnitySendMessage = KittyScanner::findRegisterNativeFn(unityMaps, "nativeUnitySendMessage");
+    RegisterNativeFn nativeUnitySendMessage = KittyScanner::findRegisterNativeFn(unityELF, "nativeUnitySendMessage");
     if (nativeUnitySendMessage.isValid())
         KITTY_LOGI("nativeUnitySendMessage = { %s, %s, %p }", nativeUnitySendMessage.name, nativeUnitySendMessage.signature, nativeUnitySendMessage.fnPtr);
+    else
+        KITTY_LOGI("nativeUnitySendMessage = NULL");
 
     KITTY_LOGI("==================== PATTERN SCAN ===================");
 
@@ -183,6 +187,8 @@ __attribute__((constructor)) void init()
     std::thread(test_thread).detach();
 }
 
+
+/*
 #include <jni.h>
 
 extern "C" jint JNIEXPORT JNI_OnLoad(JavaVM* vm, void *key)
@@ -207,3 +213,4 @@ extern "C" jint JNIEXPORT JNI_OnLoad(JavaVM* vm, void *key)
     
     return JNI_VERSION_1_6;
 }
+*/
