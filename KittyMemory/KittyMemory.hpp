@@ -12,11 +12,18 @@
 #include <sys/mman.h>
 #include <vector>
 
-#ifdef __APPLE__
+#ifdef __ANDROID__
+#include <map>
+#include <dlfcn.h>
+
+#elif __APPLE__
 #include <mach/mach.h>
 #include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#include <mach-o/nlist.h>
 #include <mach-o/getsect.h>
 #include <libkern/OSCacheControl.h>
+
 #endif
 
 #include "KittyUtils.hpp"
@@ -65,19 +72,13 @@
 
 namespace KittyMemory
 {
-
-    /*
-     * mprotect wrapper
-     */
-    int setAddressProtection(const void *address, size_t length, int protection);
-
     /*
      * Reads an address content into a buffer
      */
     bool memRead(const void *address, void *buffer, size_t len);
 
 #ifdef __ANDROID__
-
+    
     class ProcMap {
     public:
         unsigned long long startAddress;
@@ -108,6 +109,11 @@ namespace KittyMemory
               offset, dev.c_str(), inode, pathname.c_str());
         }
     };
+    
+    /*
+     * mprotect wrapper
+     */
+    int setAddressProtection(const void *address, size_t length, int protection);
 
     /*
      * Writes buffer content to an address
@@ -179,9 +185,7 @@ namespace KittyMemory
       KMS_INV_BUF,
       KMS_ERR_PROT,
       KMS_ERR_GET_PAGEINFO,
-      KMS_ERR_MMAP,
-      KMS_ERR_REMAP,
-      KMS_ERR_VMCOPY,
+      KMS_ERR_VMWRITE,
     };
 
     struct seg_data_t {
@@ -230,7 +234,7 @@ namespace KittyMemory
     /*
      * vm_region_recurse_64 wrapper
      */
-    kern_return_t getPageInfo(void *page_start, vm_region_submap_short_info_64 *info_out);
+    kern_return_t getPageInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out);
 
     /*
      * returns base executable info
@@ -250,3 +254,13 @@ namespace KittyMemory
 #endif
 
 }
+
+#ifdef __APPLE__
+
+namespace KittyScanner
+{
+    uintptr_t findSymbol(const KittyMemory::MemoryFileInfo &info, const std::string &symbol);
+    uintptr_t findSymbol(const std::string &lib, const std::string &symbol);
+}
+
+#endif // __APPLE__

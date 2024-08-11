@@ -6,19 +6,24 @@
 
 #include "KittyMemory.hpp"
 
-#ifdef __ANDROID__
-#include <map>
-#include <dlfcn.h>
-
-#elif __APPLE__
+#ifdef __APPLE__
+#if 0
 bool findMSHookMemory(void *dst, const void *src, size_t len);
-extern "C" kern_return_t mach_vm_remap(vm_map_t, mach_vm_address_t *, mach_vm_size_t,
-                                       mach_vm_offset_t, int, vm_map_t, mach_vm_address_t,
-                                       boolean_t, vm_prot_t *, vm_prot_t *, vm_inherit_t);
+#endif
+extern "C"
+{
+    kern_return_t mach_vm_protect(vm_map_t target_task, mach_vm_address_t address, mach_vm_size_t size, boolean_t set_maximum, vm_prot_t new_protection);
+    
+    kern_return_t mach_vm_write(vm_map_t target_task, mach_vm_address_t address, vm_offset_t data, mach_msg_type_number_t dataCnt);
+    
+    kern_return_t mach_vm_read_overwrite(vm_map_read_t target_task, mach_vm_address_t address, mach_vm_size_t size, mach_vm_address_t data, mach_vm_size_t *outsize);
+}
 #endif
 
 namespace KittyMemory {
 
+#ifdef __ANDROID__
+    
     int setAddressProtection(const void *address, size_t length, int protection)
     {
         uintptr_t pageStart = KT_PAGE_START(address);
@@ -27,8 +32,6 @@ namespace KittyMemory {
         KITTY_LOGD("mprotect(%p, %zu, %d) = %d", address, length, protection, ret);
         return ret;
     }
-
-#ifdef __ANDROID__
 
     bool memRead(const void* address, void* buffer, size_t len)
     {
@@ -319,12 +322,11 @@ namespace KittyMemory {
 
 #elif __APPLE__
 
-    kern_return_t getPageInfo(void *page_start, vm_region_submap_short_info_64 *info_out)
+    kern_return_t getPageInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out)
     {
-      vm_address_t region = reinterpret_cast<vm_address_t>(page_start);
       vm_size_t region_len = 0;
       mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-      unsigned int depth = 0;
+      unsigned int depth = 0x1000;
       return vm_region_recurse_64(mach_task_self(), &region, &region_len,
                                   &depth, (vm_region_recurse_info_t)info_out,
                                   &info_count);
@@ -348,136 +350,159 @@ namespace KittyMemory {
             KITTY_LOGE("memRead err invalid len");
             return false;
         }
-
-        memcpy(buffer, address, len);
+        
+        mach_vm_size_t nread = 0;
+        kern_return_t kret = mach_vm_read_overwrite(mach_task_self(), mach_vm_address_t(address), mach_vm_size_t(len), mach_vm_address_t(buffer), &nread);
+        if (kret != KERN_SUCCESS || nread != len) {
+            KITTY_LOGE("memRead err vm_read failed - [ nread(%p) - kerror(%d) ]",
+                       (void*)nread, kret);
+            return false;
+        }
+        
         return true;
     }
 
     /*
     refs to
-    - https://github.com/asLody/whale/blob/master/whale/src/platform/memory.cc
+    - https://github.com/evelyneee/ellekit/blob/main/ellekitc/ellekitc.c
     - CydiaSubstrate
     */
     Memory_Status memWrite(void *address, const void *buffer, size_t len)
     {
         KITTY_LOGD("memWrite(%p, %p, %zu)", address, buffer, len);
-
+        
         if (!address) {
             KITTY_LOGE("memWrite err address (%p) is null.", address);
             return KMS_INV_ADDR;
         }
-
+        
         if (!buffer) {
             KITTY_LOGE("memWrite err buffer (%p) is null.", buffer);
             return KMS_INV_BUF;
         }
-
+        
         if (!len) {
             KITTY_LOGE("memWrite err invalid len.");
             return KMS_INV_LEN;
         }
-
-        void *page_start = reinterpret_cast<void *>(KT_PAGE_START(address));
-        void *page_offset = reinterpret_cast<void *>(KT_PAGE_OFFSET(address));
+        
+        task_t self_task = mach_task_self();
+        mach_vm_address_t page_start = mach_vm_address_t(KT_PAGE_START(address));
         size_t page_len = KT_PAGE_LEN2(address, len);
-
-        vm_region_submap_short_info_64 page_info;
-        if (getPageInfo(page_start, &page_info) != KERN_SUCCESS) {
-            KITTY_LOGE("memWrite err failed to get page info of address (%p).", address);
+        
+        vm_region_submap_short_info_64 page_info = {};
+        kern_return_t kret = getPageInfo(page_start, &page_info);
+        if (kret != KERN_SUCCESS)
+        {
+            KITTY_LOGE("memWrite err failed to get page info of address (%p) - kerror(%d).",
+                       address, kret);
             return KMS_ERR_GET_PAGEINFO;
         }
-
+        
         // already has write perm
         if (page_info.protection & VM_PROT_WRITE)
         {
-            memcpy(address, buffer, len);
+            kret = mach_vm_write(self_task, mach_vm_address_t(address), vm_offset_t(buffer), mach_msg_type_number_t(len));
+            if (kret != KERN_SUCCESS)
+            {
+                KITTY_LOGE("memWrite err vm_write failed to write data to address (%p) - kerror(%d).",
+                           address, kret);
+                return KMS_ERR_VMWRITE;
+            }
             return KMS_SUCCESS;
         }
-
+        
+#if 0
         // check for Substrate/ellekit MSHookMemory existance first
         if (findMSHookMemory(address, buffer, len))
             return KMS_SUCCESS;
-
-        // create new map, copy our code to it then remap it over target map
-
-        void *new_map = mmap(nullptr, page_len, _PROT_RW_, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
-        if (!new_map) {
-            KITTY_LOGE("memWrite err mmap(%zu) failed.", page_len);
-            return KMS_ERR_MMAP;
-        }
-
-        task_t self_task = mach_task_self();
-
-        // copy original page content to new
-        if (vm_copy(self_task, reinterpret_cast<vm_address_t>(page_start), page_len,
-                    reinterpret_cast<vm_address_t>(new_map)) != KERN_SUCCESS)
+#endif
+                
+        // copy-on-write, see vm_map_protect in vm_map.c
+        kret = mach_vm_protect(self_task, page_start, page_len, false,
+                               VM_PROT_READ|VM_PROT_WRITE|VM_PROT_COPY);
+        if (kret != KERN_SUCCESS)
         {
-            KITTY_LOGE("memWrite err vm_copy(%p, %zu, %p) failed.", page_start, page_len, new_map);
-            munmap(new_map, page_len);
+            KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) COW failed - kerror(%d).",
+                       (void*)page_start, page_len, page_info.protection, kret);
             return KMS_ERR_PROT;
         }
-
-        // write patch code to new
-        void *dst = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(new_map) + reinterpret_cast<uintptr_t>(page_offset));
-        memcpy(dst, buffer, len);
-
-        // original prot on new
-        if (mprotect(new_map, page_len, (page_info.protection & (_PROT_RWX_))) == -1)
+        
+        kret = mach_vm_write(self_task, mach_vm_address_t(address), vm_offset_t(buffer), mach_msg_type_number_t(len));
+        if (kret != KERN_SUCCESS)
         {
-            KITTY_LOGE("memWrite err failed to set new_map to original protection (new_map: %p, len: %zu, prot: %d).",
-                       new_map, page_len, page_info.protection);
-            munmap(new_map, page_len);
+            KITTY_LOGE("memWrite err vm_write failed to write data to address (%p) - kerror(%d).",
+                       address, kret);
+            return KMS_ERR_VMWRITE;
+        }
+        
+        kret = mach_vm_protect(self_task, page_start, page_len, false, page_info.protection);
+        if (kret != KERN_SUCCESS)
+        {
+            KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) restore failed - kerror(%d).",
+                       (void*)page_start, page_len, page_info.protection, kret);
             return KMS_ERR_PROT;
         }
-
-        // remap
-        vm_prot_t cur_protection, max_protection;
-        mach_vm_address_t mach_vm_page_start = reinterpret_cast<mach_vm_address_t>(page_start);
-        if (mach_vm_remap(self_task, &mach_vm_page_start, page_len, 0, VM_FLAGS_OVERWRITE,
-                          self_task, reinterpret_cast<mach_vm_address_t>(new_map),
-                          TRUE, &cur_protection, &max_protection,
-                          page_info.inheritance) != KERN_SUCCESS)
-        {
-            KITTY_LOGE("memWrite err vm_remap(page: %p, len: %zu, prot: %d) failed.",
-                       page_start, page_len, page_info.protection);
-            munmap(new_map, page_len);
-            return KMS_ERR_REMAP;
-        }
-
-        munmap(new_map, page_len);
+        
+        sys_icache_invalidate(reinterpret_cast<void*>(page_start), page_len);
+        
         return KMS_SUCCESS;
     }
 
     MemoryFileInfo getBaseInfo()
     {
-        MemoryFileInfo _info;
+        uint32_t exeBufSize = 1024;
+        std::vector<char> exeBuf(exeBufSize, 0);
+        if (_NSGetExecutablePath(exeBuf.data(), &exeBufSize) == -1)
+        {
+            exeBuf.clear();
+            exeBuf.resize(exeBufSize+1, 0);
+            _NSGetExecutablePath(exeBuf.data(), &exeBufSize);
+        }
 
         const uint32_t imageCount = _dyld_image_count();
+        int exeIdx = -1;
 
         for (uint32_t i = 0; i < imageCount; i++)
         {
             const mach_header *hdr = _dyld_get_image_header(i);
             if (!hdr || hdr->filetype != MH_EXECUTE) continue;
-
+            
             // first executable
-            _info.index = i;
-#ifdef __LP64__
-            _info.header = (const mach_header_64*)_dyld_get_image_header(i);
-#else
-            _info.header = _dyld_get_image_header(i);
-#endif
-            _info.name = _dyld_get_image_name(i);
-            _info.address = _dyld_get_image_vmaddr_slide(i);
-
+            if (exeIdx == -1)
+                exeIdx = i;
+            
+            const char *name = _dyld_get_image_name(i);
+            if (!name || strlen(name) != strlen(exeBuf.data()) || strcmp(name, exeBuf.data()) != 0)
+                continue;
+            
+            exeIdx = i;
             break;
         }
+        
+        MemoryFileInfo _info = {};
 
+        if (exeIdx >= 0)
+        {
+            _info.index = exeIdx;
+#ifdef __LP64__
+            _info.header = (const mach_header_64*)_dyld_get_image_header(exeIdx);
+#else
+            _info.header = _dyld_get_image_header(exeIdx);
+#endif
+            _info.name = _dyld_get_image_name(exeIdx);
+            _info.address = _dyld_get_image_vmaddr_slide(exeIdx);
+        }
+        
         return _info;
     }
 
     MemoryFileInfo getMemoryFileInfo(const std::string& fileName)
     {
-        MemoryFileInfo _info;
+        MemoryFileInfo _info = {};
+        
+        if (fileName.empty())
+            return _info;
 
         const uint32_t imageCount = _dyld_image_count();
 
@@ -501,12 +526,13 @@ namespace KittyMemory {
 
             break;
         }
+        
         return _info;
     }
 
     uintptr_t getAbsoluteAddress(const char *fileName, uintptr_t address)
     {
-        MemoryFileInfo info;
+        MemoryFileInfo info = {};
 
         if (fileName)
             info = getMemoryFileInfo(fileName);
@@ -526,8 +552,8 @@ namespace KittyMemory {
 
 #ifdef __APPLE__
 
-#if !defined(kNO_SUBSTRATE) && defined(THEOS_INSTANCE_NAME)
-#include <substrate.h>
+#if 0
+#ifndef kNO_SUBSTRATE
 bool findMSHookMemory(void *dst, const void *src, size_t len)
 {
     static bool checked = false;
@@ -535,12 +561,9 @@ bool findMSHookMemory(void *dst, const void *src, size_t len)
 
     if (!checked)
     {
-        MSImageRef image = MSGetImageByName("/usr/lib/libsubstrate.dylib");
-        if(!image)
-            image = MSGetImageByName("/usr/lib/libellekit.dylib");
-
-        if(image)
-            fnPtr = MSFindSymbol(image, "_MSHookMemory");
+        fnPtr = (void*)KittyScanner::findSymbol("/usr/lib/libsubstrate.dylib", "_MSHookMemory");
+        if (!fnPtr)
+            fnPtr = (void*)KittyScanner::findSymbol("/usr/lib/libellekit.dylib", "_MSHookMemory");
 
         checked = true;
     }
@@ -556,5 +579,73 @@ bool findMSHookMemory(void *dst, const void *src, size_t len)
 #else
 bool findMSHookMemory(void *, const void *, size_t) { return false; }
 #endif
+#endif
+
+namespace KittyScanner
+{
+    uintptr_t findSymbol(const KittyMemory::MemoryFileInfo &info, const std::string &symbol)
+    {
+        if (!info.header || !info.address || symbol.empty())
+            return 0;
+        
+        uintptr_t slide = info.address;
+        
+#ifdef __LP64__
+        struct mach_header_64 *header = (struct mach_header_64 *)info.header;
+        const int lc_seg = LC_SEGMENT_64;
+        struct segment_command_64 *curr_seg_cmd = nullptr;
+        struct segment_command_64 *linkedit_segment_cmd = nullptr;
+        struct symtab_command *symtab_cmd = nullptr;
+        struct nlist_64 *symtab = nullptr;
+#else
+        struct mach_header *header = (struct mach_header *)libInfo.header;
+        const int lc_seg = LC_SEGMENT;
+        struct segment_command *curr_seg_cmd = nullptr;
+        struct segment_command *linkedit_segment_cmd = nullptr;
+        struct symtab_command *symtab_cmd = nullptr;
+        struct nlist *symtab = nullptr;
+#endif
+        
+        uintptr_t curr = uintptr_t(header) + sizeof(*header);
+        for (uint32_t i = 0; i < header->ncmds; i++, curr += curr_seg_cmd->cmdsize)
+        {
+            *(uintptr_t*)&curr_seg_cmd = curr;
+            
+            if (curr_seg_cmd->cmd == lc_seg && (strcmp(curr_seg_cmd->segname, SEG_LINKEDIT) == 0))
+                *(uintptr_t*)&linkedit_segment_cmd = curr;
+            else if (curr_seg_cmd->cmd == LC_SYMTAB)
+                *(uintptr_t*)&symtab_cmd = curr;
+        }
+        
+        if (!linkedit_segment_cmd || !symtab_cmd)
+            return 0;
+        
+        uintptr_t linkedit_base = (slide + linkedit_segment_cmd->vmaddr) - linkedit_segment_cmd->fileoff;
+        *(uintptr_t*)&symtab = (linkedit_base + symtab_cmd->symoff);
+        char *strtab = (char *)(linkedit_base + symtab_cmd->stroff);
+        
+        for (uint32_t i = 0; i < symtab_cmd->nsyms; i++)
+        {
+            if (symtab[i].n_value == 0)
+                continue;
+            
+            std::string curr_sym_str = std::string(strtab + symtab[i].n_un.n_strx);
+            
+            //KITTY_LOGI("syms[%d] = [%{public}s, %p]", i, curr_sym_str.c_str(), (void*)symtab[i].n_value);
+            
+            if (curr_sym_str.empty() || curr_sym_str != symbol)
+                continue;
+            
+            return slide + symtab[i].n_value;
+        }
+        
+        return 0;
+    }
+    
+    uintptr_t findSymbol(const std::string &lib, const std::string &symbol)
+    {
+        return findSymbol(KittyMemory::getMemoryFileInfo(lib), symbol);
+    }
+}
 
 #endif // __APPLE__
