@@ -9,6 +9,7 @@ BUILD_PATH=${PWD}/_keystone_builds_android
 ARCH_TARGETS="armeabi-v7a arm64-v8a x86 x86_64"
 
 rm -rf ${BUILD_PATH}
+rm -rf ${SOURCE_PATH}
 
 git clone https://github.com/keystone-engine/keystone.git keystone
 
@@ -21,16 +22,15 @@ do
     mkdir -p ${TARGET_BUILD_PATH}
     cd ${TARGET_BUILD_PATH}
 
-    cmake ${SOURCE_PATH} -G"Unix Makefiles" \
+    cmake -DBUILD_LIBS_ONLY=1 -DBUILD_SHARED_LIBS=0 ${SOURCE_PATH} -G"Unix Makefiles" \
     -DCMAKE_SYSTEM_NAME=Android \
     -DCMAKE_SYSTEM_VERSION=21 \
     -DCMAKE_ANDROID_NDK=${NDK_HOME} \
     -DCMAKE_ANDROID_ARCH_ABI=${ARCH_TARGET} \
     -DCMAKE_ANDROID_STL_TYPE=c++_static \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_SHARED_LIBS=0
-
-    make -j32
+    -DCMAKE_BUILD_TYPE=Release
+    
+    make -j8
 
     cd -
 
