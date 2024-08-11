@@ -33,4 +33,9 @@ $(TWEAK_NAME)_FILES = Tweak.mm $(KITTYMEMORY_SRC)
 $(TWEAK_NAME)_OBJ_FILES = $(KITTYMEMORY_PATH)/Deps/Keystone/libs-ios/$(THEOS_CURRENT_ARCH)/libkeystone.a
 ```
 
+If you don't want to link keystone and use MemoryPatch::createWithAsm then add definition kNO_KEYSTONE to your cpp flags:
+```make
+$(TWEAK_NAME)_CCFLAGS += -DkNO_KEYSTONE
+```
+
 You can check example here [Makefile](Makefile).

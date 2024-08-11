@@ -20,6 +20,7 @@ git clone --recursive https://github.com/MJx0/KittyMemory.git
 - In your Android.mk somewhere at top, define:
 
 ```make
+## it's better to use relative path to $(LOCAL_PATH) and then use subst
 KITTYMEMORY_PATH = path/to/KittyMemory
 KITTYMEMORY_SRC = $(wildcard $(KITTYMEMORY_PATH)/*.cpp)
 ```
@@ -77,3 +78,6 @@ link_libraries(${KEYSTONE_LIB})
 ```
 
 You can check example here [CMakeLists.txt](CMakeLists.txt).
+
+NOTE:
+If you don't want to link keystone and use MemoryPatch::createWithAsm then add definition kNO_KEYSTONE to your cpp flags.
