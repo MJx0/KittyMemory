@@ -1,7 +1,7 @@
 LOCAL_PATH := $(call my-dir)
 
-KITTYMEMORY_PATH = ../KittyMemory
-KITTYMEMORY_SRC = $(wildcard $(KITTYMEMORY_PATH)/*.cpp)
+KITTYMEMORY_PATH = $(LOCAL_PATH)/../KittyMemory
+KITTYMEMORY_SRC = $(subst $(LOCAL_PATH),.,$(wildcard $(KITTYMEMORY_PATH)/*.cpp))
 
 ## Keystone static lib link
 include $(CLEAR_VARS)
