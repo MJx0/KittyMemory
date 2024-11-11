@@ -598,7 +598,7 @@ namespace KittyScanner
         struct symtab_command *symtab_cmd = nullptr;
         struct nlist_64 *symtab = nullptr;
 #else
-        struct mach_header *header = (struct mach_header *)libInfo.header;
+        struct mach_header *header = (struct mach_header *)info.header;
         const int lc_seg = LC_SEGMENT;
         struct segment_command *curr_seg_cmd = nullptr;
         struct segment_command *linkedit_segment_cmd = nullptr;
