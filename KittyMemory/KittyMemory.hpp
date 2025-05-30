@@ -101,7 +101,7 @@ namespace KittyMemory
         inline bool isUnknown() const { return pathname.empty(); }
         inline bool isValidELF() const { return isValid() && length > 4 && readable && memcmp((const void *) startAddress, "\177ELF", 4) == 0; }
         inline bool contains(uintptr_t address) const { return address >= startAddress && address < endAddress; }
-        inline std::string toString()
+        inline std::string toString() const
         {
           return KittyUtils::String::Fmt("%llx-%llx %c%c%c%c %llx %s %lu %s",
               startAddress, endAddress,
