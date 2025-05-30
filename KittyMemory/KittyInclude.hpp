@@ -5,6 +5,7 @@
 #include "MemoryPatch.hpp"
 #include "KittyScanner.hpp"
 #include "KittyArm64.hpp"
+#include "KittyPtrValidator.hpp"
 
 #ifdef __ANDROID__
 using KittyMemory::ProcMap;
