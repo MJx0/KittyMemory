@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <fcntl.h>
 #include <string>
-#include <string_view>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
@@ -56,25 +55,25 @@ public:
         }
     }
 
-    inline bool isPtrReadable(uintptr_t ptr)
+    inline bool isPtrReadable(uintptr_t ptr, size_t len = sizeof(void*))
     {
         if (ptr == 0) return false;
         RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.readable;
+        return _findRegion(ptr, &region) && region.readable && (ptr+len) <= region.end;
     }
 
-    inline bool isPtrWritable(uintptr_t ptr)
+    inline bool isPtrWritable(uintptr_t ptr, size_t len = sizeof(void*))
     {
         if (ptr == 0) return false;
         RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.writable;
+        return _findRegion(ptr, &region) && region.writable && (ptr+len) <= region.end;
     }
 
-    inline bool isPtrExecutable(uintptr_t ptr)
+    inline bool isPtrExecutable(uintptr_t ptr, size_t len = sizeof(void*))
     {
         if (ptr == 0) return false;
         RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.executable;
+        return _findRegion(ptr, &region) && region.executable && (ptr+len) <= region.end;
     }
 
     inline bool isPtrInAddressSpace(uintptr_t ptr)
@@ -84,10 +83,10 @@ public:
         return _findRegion(ptr, &region);
     }
 
-    inline bool isPtrReadable(const void *ptr) { return ptr && isPtrReadable(uintptr_t(ptr)); }
-    inline bool isPtrWritable(const void *ptr) { return ptr && isPtrWritable(uintptr_t(ptr)); }
-    inline bool isPtrExecutable(const void *ptr) { return ptr && isPtrExecutable(uintptr_t(ptr)); }
-    inline bool isPtrInAddressSpace(const void *ptr) { return ptr && isPtrInAddressSpace(uintptr_t(ptr)); }
+    inline bool isPtrReadable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrReadable(uintptr_t(ptr), len); }
+    inline bool isPtrWritable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrWritable(uintptr_t(ptr), len); }
+    inline bool isPtrExecutable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrExecutable(uintptr_t(ptr), len); }
+    inline bool isPtrInAddressSpace(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrInAddressSpace(uintptr_t(ptr)); }
 
     inline void clearCache()
     {
@@ -162,25 +161,25 @@ public:
         pid_ = pid;
     }
 
-    inline bool isPtrReadable(uintptr_t ptr)
+    inline bool isPtrReadable(uintptr_t ptr, size_t len = sizeof(void*))
     {
         if (ptr == 0) return false;
         RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.readable;
+        return _findRegion(ptr, &region) && region.readable && (ptr+len) <= region.end;
     }
 
-    inline bool isPtrWritable(uintptr_t ptr)
+    inline bool isPtrWritable(uintptr_t ptr, size_t len = sizeof(void*))
     {
         if (ptr == 0) return false;
         RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.writable;
+        return _findRegion(ptr, &region) && region.writable && (ptr+len) <= region.end;
     }
 
-    inline bool isPtrExecutable(uintptr_t ptr)
+    inline bool isPtrExecutable(uintptr_t ptr, size_t len = sizeof(void*))
     {
         if (ptr == 0) return false;
         RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.executable;
+        return _findRegion(ptr, &region) && region.executable && (ptr+len) <= region.end;
     }
 
     inline bool isPtrInAddressSpace(uintptr_t ptr)
@@ -190,10 +189,10 @@ public:
         return _findRegion(ptr, &region);
     }
 
-    inline bool isPtrReadable(const void *ptr) { return ptr && isPtrReadable(uintptr_t(ptr)); }
-    inline bool isPtrWritable(const void *ptr) { return ptr && isPtrWritable(uintptr_t(ptr)); }
-    inline bool isPtrExecutable(const void *ptr) { return ptr && isPtrExecutable(uintptr_t(ptr)); }
-    inline bool isPtrInAddressSpace(const void *ptr) { return ptr && isPtrInAddressSpace(uintptr_t(ptr)); }
+    inline bool isPtrReadable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrReadable(uintptr_t(ptr), len); }
+    inline bool isPtrWritable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrWritable(uintptr_t(ptr), len); }
+    inline bool isPtrExecutable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrExecutable(uintptr_t(ptr), len); }
+    inline bool isPtrInAddressSpace(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrInAddressSpace(uintptr_t(ptr)); }
 
     inline void clearCache()
     {
