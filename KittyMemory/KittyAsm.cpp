@@ -1,4 +1,4 @@
-#include "KittyArm64.hpp"
+#include "KittyAsm.hpp"
 
 // refs to
 // https://github.com/CAS-Atlantic/AArch64-Encoding
@@ -8,9 +8,8 @@
 // https://reverseengineering.stackexchange.com/questions/15418/getting-function-address-by-reading-adrp-and-add-instruction-values
 // https://stackoverflow.com/questions/41906688/what-are-the-semantics-of-adrp-and-adrl-instructions-in-arm-assembly
 
-namespace KittyArm64
+namespace KittyAsm
 {
-
 	int32_t bit_from(uint32_t insn, int pos)
 	{
 		return ((1 << pos) & insn) >> pos;
@@ -20,7 +19,12 @@ namespace KittyArm64
 	{
 		return (insn >> pos) & ((1 << l) - 1);
 	}
+}
 
+using namespace KittyAsm;
+
+namespace KittyArm64
+{
 	bool is_insn_adr(uint32_t insn)
 	{
 		return (insn & 0x9F000000) == 0x10000000;
@@ -130,6 +134,6 @@ namespace KittyArm
 {
 	int32_t decode_ldr_literal(uint32_t insn)
 	{
-		return KittyArm64::bits_from(insn, 0, 12);
+		return KittyAsm::bits_from(insn, 0, 12);
 	}
 }

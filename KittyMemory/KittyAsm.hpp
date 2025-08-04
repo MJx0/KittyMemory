@@ -4,13 +4,14 @@
 #include <cstdint>
 #include <string>
 
+namespace KittyAsm
+{
+	int32_t bit_from(uint32_t insn, int pos);
+	int32_t bits_from(uint32_t insn, int pos, int l);
+}
+
 namespace KittyArm64
 {
-
-	int32_t bit_from(uint32_t insn, int pos);
-
-	int32_t bits_from(uint32_t insn, int pos, int l);
-
 	bool is_insn_adr(uint32_t insn);
 
 	bool is_insn_adrp(uint32_t insn);

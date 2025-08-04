@@ -4,7 +4,7 @@
 #include "KittyMemory.hpp"
 #include "MemoryPatch.hpp"
 #include "KittyScanner.hpp"
-#include "KittyArm64.hpp"
+#include "KittyAsm.hpp"
 #include "KittyPtrValidator.hpp"
 
 #ifdef __ANDROID__
