@@ -1,4 +1,4 @@
-@ECHO off
-COLOR 00
+#!/bin/bash
+
 adb logcat -c
 adb logcat -s "KittyMemory"
