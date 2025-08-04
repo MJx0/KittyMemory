@@ -41,9 +41,12 @@ private:
     bool _findRegion(uintptr_t addr, RegionInfo *region);
 
 public:
-    KittyPtrValidator() : task_(mach_task_self()), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(true), last_region_index_(0) {}
+    KittyPtrValidator() : task_(mach_task_self()), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(false), last_region_index_(0) {}
 
-    KittyPtrValidator(mach_port_t task, bool use_cache) : task_(task), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(use_cache), last_region_index_(0) {}
+    KittyPtrValidator(mach_port_t task, bool use_cache) : task_(task), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(use_cache), last_region_index_(0)
+    {
+        if (use_cache_) refreshRegionCache();
+    }
 
     inline void setUseCache(bool use_cache)
     {
@@ -52,6 +55,10 @@ public:
         {
             regions_.clear();
             last_region_index_ = 0;
+        }
+        else
+        {
+            refreshRegionCache();
         }
     }
 
@@ -140,9 +147,12 @@ private:
     bool _findRegion(uintptr_t addr, RegionInfo *region);
 
 public:
-    KittyPtrValidator() : pid_(getpid()), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(true), last_region_index_(0) {}
+    KittyPtrValidator() : pid_(getpid()), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(false), last_region_index_(0) {}
 
-    KittyPtrValidator(pid_t pid, bool use_cache) : pid_(pid), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(use_cache), last_region_index_(0) {}
+    KittyPtrValidator(pid_t pid, bool use_cache) : pid_(pid), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(use_cache), last_region_index_(0)
+    {
+        if (use_cache_) refreshRegionCache();
+    }
 
     inline void setUseCache(bool use_cache)
     {
@@ -152,6 +162,10 @@ public:
             regions_.clear();
             last_region_index_ = 0;
         }
+        else
+        {
+            refreshRegionCache();
+        }
     }
 
     inline void setPID(pid_t pid)
@@ -159,6 +173,11 @@ public:
         regions_.clear();
         last_region_index_ = 0;
         pid_ = pid;
+
+        if (use_cache_)
+        {
+            refreshRegionCache();
+        }
     }
 
     inline bool isPtrReadable(uintptr_t ptr, size_t len = sizeof(void*))
