@@ -13,17 +13,18 @@ bool findMSHookMemory(void *dst, const void *src, size_t len);
 extern "C"
 {
     kern_return_t mach_vm_protect(vm_map_t target_task, mach_vm_address_t address, mach_vm_size_t size, boolean_t set_maximum, vm_prot_t new_protection);
-    
+
     kern_return_t mach_vm_write(vm_map_t target_task, mach_vm_address_t address, vm_offset_t data, mach_msg_type_number_t dataCnt);
-    
+
     kern_return_t mach_vm_read_overwrite(vm_map_read_t target_task, mach_vm_address_t address, mach_vm_size_t size, mach_vm_address_t data, mach_vm_size_t *outsize);
 }
 #endif
 
-namespace KittyMemory {
+namespace KittyMemory
+{
 
 #ifdef __ANDROID__
-    
+
     int setAddressProtection(const void *address, size_t length, int protection)
     {
         uintptr_t pageStart = KT_PAGE_START(address);
@@ -33,47 +34,54 @@ namespace KittyMemory {
         return ret;
     }
 
-    bool memRead(const void* address, void* buffer, size_t len)
+    bool memRead(const void *address, void *buffer, size_t len)
     {
         KITTY_LOGD("memRead(%p, %p, %zu)", address, buffer, len);
 
-        if (!address) {
+        if (!address)
+        {
             KITTY_LOGE("memRead err address (%p) is null", address);
             return false;
         }
 
-        if (!buffer) {
+        if (!buffer)
+        {
             KITTY_LOGE("memRead err buffer (%p) is null", buffer);
             return false;
         }
 
-        if (!len) {
+        if (!len)
+        {
             KITTY_LOGE("memRead err invalid len");
             return false;
         }
 
         ProcMap addressMap = getAddressMap(address);
-        if (!addressMap.isValid()) {
+        if (!addressMap.isValid())
+        {
             KITTY_LOGE("memRead err couldn't find address (%p) in any map", address);
             return false;
         }
 
-        if (addressMap.protection & PROT_READ) {
+        if (addressMap.protection & PROT_READ)
+        {
             memcpy(buffer, address, len);
             return true;
         }
 
-        if (setAddressProtection(address, len, addressMap.protection | PROT_READ) != 0) {
+        if (setAddressProtection(address, len, addressMap.protection | PROT_READ) != 0)
+        {
             KITTY_LOGE("memRead err couldn't add write perm to address (%p, len: %zu, prot: %d)",
-                address, len, addressMap.protection);
+                       address, len, addressMap.protection);
             return false;
         }
 
         memcpy(buffer, address, len);
 
-        if (setAddressProtection(address, len, addressMap.protection) != 0) {
+        if (setAddressProtection(address, len, addressMap.protection) != 0)
+        {
             KITTY_LOGE("memRead err couldn't revert protection of address (%p, len: %zu, prot: %d)",
-                address, len, addressMap.protection);
+                       address, len, addressMap.protection);
             return false;
         }
 
@@ -84,43 +92,50 @@ namespace KittyMemory {
     {
         KITTY_LOGD("memWrite(%p, %p, %zu)", address, buffer, len);
 
-        if (!address) {
+        if (!address)
+        {
             KITTY_LOGE("memWrite err address (%p) is null", address);
             return false;
         }
 
-        if (!buffer) {
+        if (!buffer)
+        {
             KITTY_LOGE("memWrite err buffer (%p) is null", buffer);
             return false;
         }
 
-        if (!len) {
+        if (!len)
+        {
             KITTY_LOGE("memWrite err invalid len");
             return false;
         }
 
         ProcMap addressMap = getAddressMap(address);
-        if (!addressMap.isValid()) {
+        if (!addressMap.isValid())
+        {
             KITTY_LOGE("memWrite err couldn't find address (%p) in any map", address);
             return false;
         }
 
-        if (addressMap.protection & PROT_WRITE) {
+        if (addressMap.protection & PROT_WRITE)
+        {
             memcpy(address, buffer, len);
             return true;
         }
 
-        if (setAddressProtection(address, len, addressMap.protection | PROT_WRITE) != 0) {
+        if (setAddressProtection(address, len, addressMap.protection | PROT_WRITE) != 0)
+        {
             KITTY_LOGE("memWrite err couldn't add write perm to address (%p, len: %zu, prot: %d)",
-                            address, len, addressMap.protection);
+                       address, len, addressMap.protection);
             return false;
         }
 
         memcpy(address, buffer, len);
 
-        if (setAddressProtection(address, len, addressMap.protection) != 0) {
+        if (setAddressProtection(address, len, addressMap.protection) != 0)
+        {
             KITTY_LOGE("memWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)",
-                            address, len, addressMap.protection);
+                       address, len, addressMap.protection);
             return false;
         }
 
@@ -132,7 +147,8 @@ namespace KittyMemory {
         const char *file = "/proc/self/cmdline";
         char cmdline[128] = {0};
         FILE *fp = fopen(file, "r");
-        if (!fp) {
+        if (!fp)
+        {
             KITTY_LOGE("Couldn't open file %s.", file);
             return "";
         }
@@ -148,12 +164,14 @@ namespace KittyMemory {
         char line[512] = {0};
 
         FILE *fp = fopen(file, "r");
-        if (!fp) {
+        if (!fp)
+        {
             KITTY_LOGE("Couldn't open file %s.", file);
             return retMaps;
         }
 
-        while (fgets(line, sizeof(line), fp)) {
+        while (fgets(line, sizeof(line), fp))
+        {
             ProcMap map;
 
             char perms[5] = {0}, dev[11] = {0}, pathname[256] = {0};
@@ -167,15 +185,18 @@ namespace KittyMemory {
             map.dev = dev;
             map.pathname = pathname;
 
-            if (perms[0] == 'r') {
+            if (perms[0] == 'r')
+            {
                 map.protection |= PROT_READ;
                 map.readable = true;
             }
-            if (perms[1] == 'w') {
+            if (perms[1] == 'w')
+            {
                 map.protection |= PROT_WRITE;
                 map.writeable = true;
             }
-            if (perms[2] == 'x') {
+            if (perms[2] == 'x')
+            {
                 map.protection |= PROT_EXEC;
                 map.executable = true;
             }
@@ -192,22 +213,23 @@ namespace KittyMemory {
 
         fclose(fp);
 
-        if (retMaps.empty()) {
+        if (retMaps.empty())
+        {
             KITTY_LOGE("getAllMaps err couldn't find any map");
         }
         return retMaps;
     }
 
-    std::vector<ProcMap> getMapsEqual(const std::vector<ProcMap> &maps, const std::string& name)
+    std::vector<ProcMap> getMapsEqual(const std::vector<ProcMap> &maps, const std::string &name)
     {
         if (name.empty()) return {};
 
-        KITTY_LOGD("getMapsEqual(%s)", name.c_str());
-
         std::vector<ProcMap> retMaps;
 
-        for(auto &it : maps) {
-            if (it.isValid() && !it.isUnknown() && it.pathname == name) {
+        for (auto &it : maps)
+        {
+            if (it.isValid() && !it.isUnknown() && it.pathname == name)
+            {
                 retMaps.push_back(it);
             }
         }
@@ -219,12 +241,12 @@ namespace KittyMemory {
     {
         if (name.empty()) return {};
 
-        KITTY_LOGD("getMapsContain(%s)", name.c_str());
-
         std::vector<ProcMap> retMaps;
 
-        for(auto &it : maps) {
-            if (it.isValid() && !it.isUnknown() && strstr(it.pathname.c_str(), name.c_str())) {
+        for (auto &it : maps)
+        {
+            if (it.isValid() && !it.isUnknown() && strstr(it.pathname.c_str(), name.c_str()))
+            {
                 retMaps.push_back(it);
             }
         }
@@ -236,12 +258,12 @@ namespace KittyMemory {
     {
         if (name.empty()) return {};
 
-        KITTY_LOGD("getMapsEndWith(%s)", name.c_str());
-
         std::vector<ProcMap> retMaps;
 
-        for(auto &it : maps) {
-            if (it.isValid() && !it.isUnknown() && KittyUtils::String::EndsWith(it.pathname, name)) {
+        for (auto &it : maps)
+        {
+            if (it.isValid() && !it.isUnknown() && KittyUtils::String::EndsWith(it.pathname, name))
+            {
                 retMaps.push_back(it);
             }
         }
@@ -251,14 +273,14 @@ namespace KittyMemory {
 
     ProcMap getAddressMap(const std::vector<ProcMap> &maps, const void *address)
     {
-        KITTY_LOGD("getAddressMap(%p)", address);
-
         if (!address) return {};
 
         ProcMap retMap{};
 
-        for(auto &it : maps) {
-            if (it.isValid() && it.contains((uintptr_t)address)) {
+        for (auto &it : maps)
+        {
+            if (it.isValid() && it.contains((uintptr_t)address))
+            {
                 retMap = it;
                 break;
             }
@@ -267,98 +289,121 @@ namespace KittyMemory {
         return retMap;
     }
 
-    ProcMap getElfBaseMap(const std::string& name)
+    bool dumpMemToDisk(uintptr_t address, size_t size, const std::string &destination)
     {
-        ProcMap retMap{};
+        if (!address || !size || destination.empty())
+            return false;
 
-        if (name.empty())
-            return retMap;
+        auto allMaps = getAllMaps();
 
-        bool isZippedInAPK = false;
-        auto maps = getMapsEndWith(name);
-        if (maps.empty())
+        if (!getAddressMap(allMaps, address).isValid())
+            return false;
+
+        uintptr_t endAddress = address + size;
+
+        int fd = KT_EINTR_RETRY(open(destination.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666));
+        if (fd <= 0) return false;
+
+        size_t bytesWritten = 0;
+        for (const auto &it : allMaps)
         {
-            // some apps use dlopen on zipped libraries like xxx.apk!/lib/xxx/libxxx.so
-            // so we'll search in app's base.apk maps too
-            maps = getMapsEndWith(".apk");
-            if (maps.empty()) {
-                return retMap;
+            if (it.startAddress < address) continue;
+            if (it.startAddress >= endAddress) break;
+
+            if (!it.readable && KittyMemory::setAddressProtection((void *)(it.startAddress), it.endAddress, it.protection | PROT_READ) != 0)
+            {
+                std::vector<char> zeroData(it.length, 0);
+                KittyUtils::IO::WriteDataToFD(fd, zeroData.data(), zeroData.size());
             }
-            isZippedInAPK = true;
-        }
+            else
+            {
+                size_t n = KittyUtils::IO::WriteDataToFD(fd, (const void *)address, size);
+                bytesWritten += n;
+                if (n < it.length)
+                {
+                    std::vector<char> zeroData(it.length - bytesWritten, 0);
+                    KittyUtils::IO::WriteDataToFD(fd, zeroData.data(), zeroData.size());
+                }
 
-        for (auto &it: maps)
-        {
-            if (!it.readable || it.offset != 0 || it.isUnknown() || it.inode == 0 || !it.is_private || !it.isValidELF())
-                continue;
-
-            // skip dladdr check for linker/linker64
-            if (strstr(it.pathname.c_str(), "/bin/linker")) {
-                retMap = it;
-                break;
-            }
-
-            Dl_info info{};
-            int rt = dladdr((void *) it.startAddress, &info);
-            // check dli_fname and dli_fbase if NULL
-            if (rt == 0 || !info.dli_fname || !info.dli_fbase || it.startAddress != (uintptr_t) info.dli_fbase)
-                continue;
-
-            if (!isZippedInAPK) {
-                retMap = it;
-                break;
-            }
-
-            // if library is zipped inside base.apk, compare dli_fname and fix pathname
-            if (KittyUtils::String::EndsWith(info.dli_fname, name)) {
-                retMap = it;
-                retMap.pathname = info.dli_fname;
-                break;
+                if (!it.readable)
+                    KittyMemory::setAddressProtection((void *)(it.startAddress), it.endAddress, it.protection);
             }
         }
 
-        return retMap;
+        close(fd);
+        return bytesWritten == size;
+    }
+
+    bool dumpMemFileToDisk(const std::string &memFile, const std::string &destination)
+    {
+        if (!memFile.empty() || destination.empty())
+            return false;
+
+        auto fileMaps = KittyMemory::getMapsEndWith(memFile);
+        if (fileMaps.empty())
+            return false;
+
+        auto firstMap = fileMaps.front();
+        fileMaps.erase(fileMaps.begin());
+
+        uintptr_t lastEnd = firstMap.endAddress;
+        if (fileMaps.size() > 1)
+        {
+            for (auto &it : fileMaps)
+            {
+                if (firstMap.inode != it.inode || it.startAddress != lastEnd)
+                    break;
+
+                lastEnd = it.endAddress;
+            }
+        }
+
+        return dumpMemToDisk(firstMap.startAddress, lastEnd - firstMap.startAddress, destination);
     }
 
 #elif __APPLE__
 
     kern_return_t getPageInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out)
     {
-      vm_size_t region_len = 0;
-      mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-      unsigned int depth = 0x1000;
-      return vm_region_recurse_64(mach_task_self(), &region, &region_len,
-                                  &depth, (vm_region_recurse_info_t)info_out,
-                                  &info_count);
+        vm_size_t region_len = 0;
+        mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
+        unsigned int depth = 0x1000;
+        return vm_region_recurse_64(mach_task_self(), &region, &region_len,
+                                    &depth, (vm_region_recurse_info_t)info_out,
+                                    &info_count);
     }
 
     bool memRead(const void *address, void *buffer, size_t len)
     {
         KITTY_LOGD("memRead(%p, %p, %zu)", address, buffer, len);
 
-        if (!address) {
+        if (!address)
+        {
             KITTY_LOGE("memRead err address (%p) is null", address);
             return false;
         }
 
-        if (!buffer) {
+        if (!buffer)
+        {
             KITTY_LOGE("memRead err buffer (%p) is null", buffer);
             return false;
         }
 
-        if (!len) {
+        if (!len)
+        {
             KITTY_LOGE("memRead err invalid len");
             return false;
         }
-        
+
         mach_vm_size_t nread = 0;
         kern_return_t kret = mach_vm_read_overwrite(mach_task_self(), mach_vm_address_t(address), mach_vm_size_t(len), mach_vm_address_t(buffer), &nread);
-        if (kret != KERN_SUCCESS || nread != len) {
+        if (kret != KERN_SUCCESS || nread != len)
+        {
             KITTY_LOGE("memRead err vm_read failed - [ nread(%p) - kerror(%d) ]",
-                       (void*)nread, kret);
+                       (void *)nread, kret);
             return false;
         }
-        
+
         return true;
     }
 
@@ -370,26 +415,29 @@ namespace KittyMemory {
     Memory_Status memWrite(void *address, const void *buffer, size_t len)
     {
         KITTY_LOGD("memWrite(%p, %p, %zu)", address, buffer, len);
-        
-        if (!address) {
+
+        if (!address)
+        {
             KITTY_LOGE("memWrite err address (%p) is null.", address);
             return KMS_INV_ADDR;
         }
-        
-        if (!buffer) {
+
+        if (!buffer)
+        {
             KITTY_LOGE("memWrite err buffer (%p) is null.", buffer);
             return KMS_INV_BUF;
         }
-        
-        if (!len) {
+
+        if (!len)
+        {
             KITTY_LOGE("memWrite err invalid len.");
             return KMS_INV_LEN;
         }
-        
+
         task_t self_task = mach_task_self();
         mach_vm_address_t page_start = mach_vm_address_t(KT_PAGE_START(address));
         size_t page_len = KT_PAGE_LEN2(address, len);
-        
+
         vm_region_submap_short_info_64 page_info = {};
         kern_return_t kret = getPageInfo(page_start, &page_info);
         if (kret != KERN_SUCCESS)
@@ -398,7 +446,7 @@ namespace KittyMemory {
                        address, kret);
             return KMS_ERR_GET_PAGEINFO;
         }
-        
+
         // already has write perm
         if (page_info.protection & VM_PROT_WRITE)
         {
@@ -411,23 +459,23 @@ namespace KittyMemory {
             }
             return KMS_SUCCESS;
         }
-        
+
 #if 0
         // check for Substrate/ellekit MSHookMemory existance first
         if (findMSHookMemory(address, buffer, len))
             return KMS_SUCCESS;
 #endif
-                
+
         // copy-on-write, see vm_map_protect in vm_map.c
         kret = mach_vm_protect(self_task, page_start, page_len, false,
-                               VM_PROT_READ|VM_PROT_WRITE|VM_PROT_COPY);
+                               VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
         if (kret != KERN_SUCCESS)
         {
             KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) COW failed - kerror(%d).",
-                       (void*)page_start, page_len, page_info.protection, kret);
+                       (void *)page_start, page_len, page_info.protection, kret);
             return KMS_ERR_PROT;
         }
-        
+
         kret = mach_vm_write(self_task, mach_vm_address_t(address), vm_offset_t(buffer), mach_msg_type_number_t(len));
         if (kret != KERN_SUCCESS)
         {
@@ -435,17 +483,17 @@ namespace KittyMemory {
                        address, kret);
             return KMS_ERR_VMWRITE;
         }
-        
+
         kret = mach_vm_protect(self_task, page_start, page_len, false, page_info.protection);
         if (kret != KERN_SUCCESS)
         {
             KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) restore failed - kerror(%d).",
-                       (void*)page_start, page_len, page_info.protection, kret);
+                       (void *)page_start, page_len, page_info.protection, kret);
             return KMS_ERR_PROT;
         }
-        
-        sys_icache_invalidate(reinterpret_cast<void*>(page_start), page_len);
-        
+
+        sys_icache_invalidate(reinterpret_cast<void *>(page_start), page_len);
+
         return KMS_SUCCESS;
     }
 
@@ -456,7 +504,7 @@ namespace KittyMemory {
         if (_NSGetExecutablePath(exeBuf.data(), &exeBufSize) == -1)
         {
             exeBuf.clear();
-            exeBuf.resize(exeBufSize+1, 0);
+            exeBuf.resize(exeBufSize + 1, 0);
             _NSGetExecutablePath(exeBuf.data(), &exeBufSize);
         }
 
@@ -467,40 +515,40 @@ namespace KittyMemory {
         {
             const mach_header *hdr = _dyld_get_image_header(i);
             if (!hdr || hdr->filetype != MH_EXECUTE) continue;
-            
+
             // first executable
             if (exeIdx == -1)
                 exeIdx = i;
-            
+
             const char *name = _dyld_get_image_name(i);
             if (!name || strlen(name) != strlen(exeBuf.data()) || strcmp(name, exeBuf.data()) != 0)
                 continue;
-            
+
             exeIdx = i;
             break;
         }
-        
+
         MemoryFileInfo _info = {};
 
         if (exeIdx >= 0)
         {
             _info.index = exeIdx;
 #ifdef __LP64__
-            _info.header = (const mach_header_64*)_dyld_get_image_header(exeIdx);
+            _info.header = (const mach_header_64 *)_dyld_get_image_header(exeIdx);
 #else
             _info.header = _dyld_get_image_header(exeIdx);
 #endif
             _info.name = _dyld_get_image_name(exeIdx);
             _info.address = _dyld_get_image_vmaddr_slide(exeIdx);
         }
-        
+
         return _info;
     }
 
-    MemoryFileInfo getMemoryFileInfo(const std::string& fileName)
+    MemoryFileInfo getMemoryFileInfo(const std::string &fileName)
     {
         MemoryFileInfo _info = {};
-        
+
         if (fileName.empty())
             return _info;
 
@@ -517,7 +565,7 @@ namespace KittyMemory {
 
             _info.index = i;
 #ifdef __LP64__
-            _info.header = (const mach_header_64*)_dyld_get_image_header(i);
+            _info.header = (const mach_header_64 *)_dyld_get_image_header(i);
 #else
             _info.header = _dyld_get_image_header(i);
 #endif
@@ -526,7 +574,7 @@ namespace KittyMemory {
 
             break;
         }
-        
+
         return _info;
     }
 
@@ -538,17 +586,16 @@ namespace KittyMemory {
             info = getMemoryFileInfo(fileName);
         else
             info = getBaseInfo();
-        
+
         if (!info.address)
             return 0;
-            
+
         return info.address + address;
     }
 
-#endif // __APPLE__
+#endif  // __APPLE__
 
-} // KittyMemory
-
+}  // namespace KittyMemory
 
 #ifdef __APPLE__
 
@@ -587,9 +634,9 @@ namespace KittyScanner
     {
         if (!info.header || !info.address || symbol.empty())
             return 0;
-        
+
         uintptr_t slide = info.address;
-        
+
 #ifdef __LP64__
         struct mach_header_64 *header = (struct mach_header_64 *)info.header;
         const int lc_seg = LC_SEGMENT_64;
@@ -605,47 +652,47 @@ namespace KittyScanner
         struct symtab_command *symtab_cmd = nullptr;
         struct nlist *symtab = nullptr;
 #endif
-        
+
         uintptr_t curr = uintptr_t(header) + sizeof(*header);
         for (uint32_t i = 0; i < header->ncmds; i++, curr += curr_seg_cmd->cmdsize)
         {
-            *(uintptr_t*)&curr_seg_cmd = curr;
-            
+            *(uintptr_t *)&curr_seg_cmd = curr;
+
             if (curr_seg_cmd->cmd == lc_seg && (strcmp(curr_seg_cmd->segname, SEG_LINKEDIT) == 0))
-                *(uintptr_t*)&linkedit_segment_cmd = curr;
+                *(uintptr_t *)&linkedit_segment_cmd = curr;
             else if (curr_seg_cmd->cmd == LC_SYMTAB)
-                *(uintptr_t*)&symtab_cmd = curr;
+                *(uintptr_t *)&symtab_cmd = curr;
         }
-        
+
         if (!linkedit_segment_cmd || !symtab_cmd)
             return 0;
-        
+
         uintptr_t linkedit_base = (slide + linkedit_segment_cmd->vmaddr) - linkedit_segment_cmd->fileoff;
-        *(uintptr_t*)&symtab = (linkedit_base + symtab_cmd->symoff);
+        *(uintptr_t *)&symtab = (linkedit_base + symtab_cmd->symoff);
         char *strtab = (char *)(linkedit_base + symtab_cmd->stroff);
-        
+
         for (uint32_t i = 0; i < symtab_cmd->nsyms; i++)
         {
             if (symtab[i].n_value == 0)
                 continue;
-            
+
             std::string curr_sym_str = std::string(strtab + symtab[i].n_un.n_strx);
-            
-            //KITTY_LOGI("syms[%d] = [%{public}s, %p]", i, curr_sym_str.c_str(), (void*)symtab[i].n_value);
-            
+
+            // KITTY_LOGI("syms[%d] = [%{public}s, %p]", i, curr_sym_str.c_str(), (void*)symtab[i].n_value);
+
             if (curr_sym_str.empty() || curr_sym_str != symbol)
                 continue;
-            
+
             return slide + symtab[i].n_value;
         }
-        
+
         return 0;
     }
-    
+
     uintptr_t findSymbol(const std::string &lib, const std::string &symbol)
     {
         return findSymbol(KittyMemory::getMemoryFileInfo(lib), symbol);
     }
-}
+}  // namespace KittyScanner
 
-#endif // __APPLE__
+#endif  // __APPLE__

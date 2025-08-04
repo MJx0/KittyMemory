@@ -11,6 +11,7 @@
 using KittyMemory::ProcMap;
 using KittyScanner::RegisterNativeFn;
 using KittyScanner::ElfScanner;
+using KittyScanner::LinkerScanner;
 
 #elif __APPLE__
 #include "writeData.hpp"
