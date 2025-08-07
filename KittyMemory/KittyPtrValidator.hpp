@@ -32,7 +32,7 @@ private:
         }
     };
 
-    std::vector<RegionInfo> regions_;
+    std::vector<RegionInfo> cachedRegions_;
     const mach_port_t task_ = mach_task_self();
     const size_t page_size_ = sysconf(_SC_PAGESIZE);
     bool use_cache_ = true;
@@ -53,7 +53,7 @@ public:
         use_cache_ = use_cache;
         if (!use_cache_)
         {
-            regions_.clear();
+            cachedRegions_.clear();
             last_region_index_ = 0;
         }
         else
@@ -93,19 +93,19 @@ public:
     inline bool isPtrReadable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrReadable(uintptr_t(ptr), len); }
     inline bool isPtrWritable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrWritable(uintptr_t(ptr), len); }
     inline bool isPtrExecutable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrExecutable(uintptr_t(ptr), len); }
-    inline bool isPtrInAddressSpace(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrInAddressSpace(uintptr_t(ptr)); }
+    inline bool isPtrInAddressSpace(const void *ptr) { return ptr && isPtrInAddressSpace(uintptr_t(ptr)); }
 
     inline void clearCache()
     {
-        regions_.clear();
+        cachedRegions_.clear();
         last_region_index_ = 0;
     }
 
     void refreshRegionCache();
 
-    inline std::vector<RegionInfo> regions() const
+    inline std::vector<RegionInfo> cachedRegions() const
     {
-        return regions_;
+        return cachedRegions_;
     }
 };
 
@@ -132,7 +132,7 @@ private:
         }
     };
 
-    std::vector<RegionInfo> regions_;
+    std::vector<RegionInfo> cachedRegions_;
     pid_t pid_ = getpid();
     const size_t page_size_ = sysconf(_SC_PAGESIZE);
     bool use_cache_ = true;
@@ -159,7 +159,7 @@ public:
         use_cache_ = use_cache;
         if (!use_cache_)
         {
-            regions_.clear();
+            cachedRegions_.clear();
             last_region_index_ = 0;
         }
         else
@@ -170,7 +170,7 @@ public:
 
     inline void setPID(pid_t pid)
     {
-        regions_.clear();
+        cachedRegions_.clear();
         last_region_index_ = 0;
         pid_ = pid;
 
@@ -211,19 +211,19 @@ public:
     inline bool isPtrReadable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrReadable(uintptr_t(ptr), len); }
     inline bool isPtrWritable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrWritable(uintptr_t(ptr), len); }
     inline bool isPtrExecutable(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrExecutable(uintptr_t(ptr), len); }
-    inline bool isPtrInAddressSpace(const void *ptr, size_t len = sizeof(void*)) { return ptr && isPtrInAddressSpace(uintptr_t(ptr)); }
+    inline bool isPtrInAddressSpace(const void *ptr) { return ptr && isPtrInAddressSpace(uintptr_t(ptr)); }
 
     inline void clearCache()
     {
-        regions_.clear();
+        cachedRegions_.clear();
         last_region_index_ = 0;
     }
 
     void refreshRegionCache();
 
-    inline std::vector<RegionInfo> regions() const
+    inline std::vector<RegionInfo> cachedRegions() const
     {
-        return regions_;
+        return cachedRegions_;
     }
 };
 

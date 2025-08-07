@@ -23,8 +23,8 @@
 #define KT_PAGE_OFFSET(x) (uintptr_t(x) - KT_PAGE_START(x))
 #define KT_PAGE_LEN(x) (size_t(KT_PAGE_SIZE - KT_PAGE_OFFSET(x)))
 
-#define KT_PAGE_END2(x, len) (KT_PAGE_START(uintptr_t(x) + len - 1))
-#define KT_PAGE_LEN2(x, len) (KT_PAGE_END2(x, len) - KT_PAGE_START(x) + KT_PAGE_SIZE)
+#define KT_PAGE_END2(x, len) (KT_PAGE_START((uintptr_t(x) + len) + KT_PAGE_SIZE - 1))
+#define KT_PAGE_LEN2(x, len) (KT_PAGE_END2(x, len) - KT_PAGE_START(x))
 
 #define KT_PROT_RWX (PROT_READ | PROT_WRITE | PROT_EXEC)
 #define KT_PROT_RX (PROT_READ | PROT_EXEC)

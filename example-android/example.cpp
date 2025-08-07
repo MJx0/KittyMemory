@@ -67,6 +67,7 @@ void test_thread()
     KITTY_LOGI("il2cpp elfhash: %p", (void *)(g_il2cppELF.elfHashTable()));
     KITTY_LOGI("il2cpp gnuhash: %p", (void *)(g_il2cppELF.gnuHashTable()));
     KITTY_LOGI("il2cpp segments count: %d", int(g_il2cppELF.segments().size()));
+    KITTY_LOGI("il2cpp InZip: %d", g_il2cppELF.isZipped() ? 1 : 0);
 
     // wait more to make sure lib is fully loaded and ready
     sleep(1);

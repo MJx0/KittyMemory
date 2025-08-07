@@ -23,24 +23,24 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
         return address <= addr && addr < address + size;
     }
 
-    if (!regions_.empty())
+    if (!cachedRegions_.empty())
     {
-        if (last_region_index_ < regions_.size() &&
-            regions_[last_region_index_].start <= addr &&
-            addr < regions_[last_region_index_].end)
+        if (last_region_index_ < cachedRegions_.size() &&
+            cachedRegions_[last_region_index_].start <= addr &&
+            addr < cachedRegions_[last_region_index_].end)
         {
-            *region = regions_[last_region_index_];
+            *region = cachedRegions_[last_region_index_];
             return true;
         }
 
         size_t left = 0;
-        size_t right = regions_.size();
+        size_t right = cachedRegions_.size();
         size_t best_match = right;
 
         while (left < right)
         {
             size_t mid = left + (right - left) / 2;
-            if (regions_[mid].end <= addr)
+            if (cachedRegions_[mid].end <= addr)
             {
                 left = mid + 1;
             }
@@ -51,11 +51,11 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
             }
         }
 
-        if (best_match < regions_.size() && regions_[best_match].start <= addr &&
-            addr < regions_[best_match].end)
+        if (best_match < cachedRegions_.size() && cachedRegions_[best_match].start <= addr &&
+            addr < cachedRegions_[best_match].end)
         {
             last_region_index_ = best_match;
-            *region = regions_[best_match];
+            *region = cachedRegions_[best_match];
             return true;
         }
     }
@@ -65,7 +65,7 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
 
 void KittyPtrValidator::refreshRegionCache()
 {
-    regions_.clear();
+    cachedRegions_.clear();
     vm_address_t address = 0;
 
     while (true)
@@ -84,21 +84,21 @@ void KittyPtrValidator::refreshRegionCache()
         bool executable = (info.protection & VM_PROT_EXECUTE) != 0;
         RegionInfo new_region(address, address + size, readable, writable, executable);
 
-        if (!regions_.empty() && regions_.back().canMergeWith(new_region))
+        if (!cachedRegions_.empty() && cachedRegions_.back().canMergeWith(new_region))
         {
-            regions_.back().end = new_region.end;
+            cachedRegions_.back().end = new_region.end;
         }
         else
         {
-            regions_.emplace_back(new_region);
+            cachedRegions_.emplace_back(new_region);
         }
 
         address += size;
     }
 
-    if (!regions_.empty())
+    if (!cachedRegions_.empty())
     {
-        std::sort(regions_.begin(), regions_.end(), [](const RegionInfo &a, const RegionInfo &b)
+        std::sort(cachedRegions_.begin(), cachedRegions_.end(), [](const RegionInfo &a, const RegionInfo &b)
         {
             return a.start < b.start;
         });
@@ -216,24 +216,24 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
         return false;
     }
 
-    if (!regions_.empty())
+    if (!cachedRegions_.empty())
     {
-        if (last_region_index_ < regions_.size() &&
-            regions_[last_region_index_].start <= addr &&
-            addr < regions_[last_region_index_].end)
+        if (last_region_index_ < cachedRegions_.size() &&
+            cachedRegions_[last_region_index_].start <= addr &&
+            addr < cachedRegions_[last_region_index_].end)
         {
-            *region = regions_[last_region_index_];
+            *region = cachedRegions_[last_region_index_];
             return true;
         }
 
         size_t left = 0;
-        size_t right = regions_.size();
+        size_t right = cachedRegions_.size();
         size_t best_match = right;
 
         while (left < right)
         {
             size_t mid = left + (right - left) / 2;
-            if (regions_[mid].end <= addr)
+            if (cachedRegions_[mid].end <= addr)
             {
                 left = mid + 1;
             }
@@ -244,11 +244,11 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
             }
         }
 
-        if (best_match < regions_.size() && regions_[best_match].start <= addr &&
-            addr < regions_[best_match].end)
+        if (best_match < cachedRegions_.size() && cachedRegions_[best_match].start <= addr &&
+            addr < cachedRegions_[best_match].end)
         {
             last_region_index_ = best_match;
-            *region = regions_[best_match];
+            *region = cachedRegions_[best_match];
             return true;
         }
     }
@@ -258,11 +258,11 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
 
 void KittyPtrValidator::refreshRegionCache()
 {
-    regions_.clear();
+    cachedRegions_.clear();
     std::string maps_data = _readMapsFile();
     if (maps_data.empty()) return;
 
-    _parseMapsFromBuffer(maps_data, &regions_);
+    _parseMapsFromBuffer(maps_data, &cachedRegions_);
     last_region_index_ = 0;
 }
 

@@ -28,9 +28,9 @@ namespace KittyMemory
     int setAddressProtection(const void *address, size_t length, int protection)
     {
         uintptr_t pageStart = KT_PAGE_START(address);
-        uintptr_t pageLen = KT_PAGE_LEN2(address, length);
+        size_t pageLen = KT_PAGE_LEN2(address, length);
         int ret = mprotect(reinterpret_cast<void *>(pageStart), pageLen, protection);
-        KITTY_LOGD("mprotect(%p, %zu, %d) = %d", address, length, protection, ret);
+        KITTY_LOGD("mprotect(%p, %zu, %d) = %d", (void*)pageStart, pageLen, protection, ret);
         return ret;
     }
 
@@ -123,19 +123,19 @@ namespace KittyMemory
             return true;
         }
 
-        if (setAddressProtection(address, len, addressMap.protection | PROT_WRITE) != 0)
+        if (setAddressProtection(address, len, KT_PROT_RWX) != 0)
         {
             KITTY_LOGE("memWrite err couldn't add write perm to address (%p, len: %zu, prot: %d)",
-                       address, len, addressMap.protection);
+                       address, len, KT_PROT_RWX);
             return false;
         }
 
         memcpy(address, buffer, len);
 
-        if (setAddressProtection(address, len, addressMap.protection) != 0)
+        if (setAddressProtection(address, len, KT_PROT_RX) != 0)
         {
             KITTY_LOGE("memWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)",
-                       address, len, addressMap.protection);
+                       address, len, KT_PROT_RX);
             return false;
         }
 

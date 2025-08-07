@@ -146,12 +146,9 @@ namespace KittyScanner
         std::vector<KT_ElfW(Dyn)> _dynamics;
         uintptr_t _stringTable, _symbolTable, _elfHashTable, _gnuHashTable;
         size_t _strsz, _syment;
-        bool _headerless;
-        KittyMemory::ProcMap _base_segment;
-        std::vector<KittyMemory::ProcMap> _segments;
-        std::vector<KittyMemory::ProcMap> _bss_segments;
         std::string _filepath;
         std::string _realpath;
+        bool _headerless;
         bool _dsymbols_init;
         std::unordered_map<std::string, uintptr_t> _dsymbolsMap;
 
@@ -177,8 +174,6 @@ namespace KittyScanner
         {
             return ElfScanner(soinfo);
         }
-
-        static ElfScanner findElf(const std::string &path);
 
         inline bool isValid() const
         {
@@ -225,15 +220,15 @@ namespace KittyScanner
         std::unordered_map<std::string, uintptr_t> dsymbols();
         uintptr_t findDebugSymbol(const std::string &symbolName);
 
-        inline KittyMemory::ProcMap baseSegment() const { return _base_segment; }
+        KittyMemory::ProcMap baseSegment() const;
 
-        inline std::vector<KittyMemory::ProcMap> segments() const { return _segments; }
+        std::vector<KittyMemory::ProcMap> segments() const;
 
-        inline std::vector<KittyMemory::ProcMap> bssSegments() const { return _bss_segments; }
+        std::vector<KittyMemory::ProcMap> bssSegments() const;
 
-        inline std::string filePath() const { return _base_segment.pathname; }
+        inline std::string filePath() const { return _filepath; }
         inline std::string realPath() const { return _realpath; }
-        inline bool isZipped() const { return _base_segment.offset != 0; }
+        inline bool isZipped() const { return baseSegment().offset != 0; }
 
         /**
          * search for string "name" references to find the JNINativeMethod array
@@ -248,6 +243,11 @@ namespace KittyScanner
 
         static std::vector<ElfScanner> GetAllELFs();
         static std::vector<ElfScanner> GetAppELFs();
+        static std::vector<ElfScanner> GetEmulatedELFs();
+        
+        static ElfScanner GetProgramElf();
+
+        static ElfScanner findElf(const std::string &path);
 
         /**
          * lookup symbol name in all loaded ELFs

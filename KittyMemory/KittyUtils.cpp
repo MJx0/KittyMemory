@@ -350,7 +350,7 @@ namespace KittyUtils
             else
                 flags |= O_TRUNC;
 
-            int fd = open(path.c_str(), flags, 0666);
+            int fd = KT_EINTR_RETRY(open(path.c_str(), flags, 0666));
             if (fd <= 0) return 0;
 
             size_t bytesWritten = WriteDataToFD(fd, buffer, len);
@@ -419,7 +419,7 @@ namespace KittyUtils
         std::vector<ZipFileInfo> listFilesInZip(const std::string &zipPath)
         {
             std::vector<ZipFileInfo> files;
-            int fd = open(zipPath.c_str(), O_RDONLY);
+            int fd = KT_EINTR_RETRY(open(zipPath.c_str(), O_RDONLY));
             if (fd < 0)
             {
                 KITTY_LOGD("open failed: %s, error: %s", zipPath.c_str(), strerror(errno));
@@ -538,7 +538,7 @@ namespace KittyUtils
         ZipFileMMap MMapFileByDataOffset(const std::string &zipPath, uint64_t dataOffset)
         {
             ZipFileMMap result;
-            int fd = open(zipPath.c_str(), O_RDONLY);
+            int fd = KT_EINTR_RETRY(open(zipPath.c_str(), O_RDONLY));
             if (fd < 0)
             {
                 KITTY_LOGD("open failed: %s, error: %s", zipPath.c_str(), strerror(errno));

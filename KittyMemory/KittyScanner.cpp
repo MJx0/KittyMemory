@@ -4,7 +4,7 @@
 #include "KittyPtrValidator.hpp"
 
 #ifdef __ANDROID__
-#include <map>
+#include <unordered_map>
 #include <dlfcn.h>
 #endif
 
@@ -250,13 +250,30 @@ namespace KittyScanner
         // read ELF header
         _ehdr = *(KT_ElfW(Ehdr) *)_elfBase;
 
+        if (_ehdr.e_ident[EI_DATA] != ELFDATA2LSB)
+        {
+            KITTY_LOGD("ElfScanner: (%p) data encoding is not little endian.", (void *)elfBase);
+            return;
+        }
+
+        if (_ehdr.e_ident[EI_VERSION] != EV_CURRENT)
+        {
+            KITTY_LOGD("ElfScanner: (%p) ELF header version mismatch.", (void *)elfBase);
+            return;
+        }
+
+        if (_ehdr.e_type != ET_EXEC && _ehdr.e_type != ET_DYN)
+        {
+            KITTY_LOGD("ElfScanner: (%p) is not a executable or dynamic library.", (void *)elfBase);
+            return;
+        }
+
         // check ELF bit
         if (_ehdr.e_ident[EI_CLASS] != KT_ELF_EICLASS)
         {
             KITTY_LOGD("ElfScanner: ELF class mismatch (%p).", (void *)_elfBase);
             return;
         }
-
         // check common header values
         if (!_ehdr.e_phoff || !_ehdr.e_phnum || !_ehdr.e_phentsize || !_ehdr.e_shnum || !_ehdr.e_shentsize)
         {
@@ -317,16 +334,6 @@ namespace KittyScanner
 
         _loadBias = _elfBase - min_vaddr;
         _loadSize = max_vaddr - min_vaddr;
-
-        uintptr_t seg_start = load_vaddr + _loadBias;
-        uintptr_t seg_mem_end = KT_PAGE_END((seg_start + load_memsz));
-        uintptr_t seg_file_end = KT_PAGE_END((seg_start + load_filesz));
-        uintptr_t bss_start = 0, bss_end = 0;
-        if (seg_mem_end > seg_file_end)
-        {
-            bss_start = seg_file_end;
-            bss_end = seg_mem_end;
-        }
 
         // read all dynamics
         for (auto &phdr : _phdrs)
@@ -399,44 +406,15 @@ namespace KittyScanner
         fix_table_address(_elfHashTable);
         fix_table_address(_gnuHashTable);
 
-        if (_loadSize)
+        _filepath = elfBaseMap.pathname;
+        _realpath = elfBaseMap.pathname;
+        if (!elfBaseMap.pathname.empty() && elfBaseMap.offset != 0)
         {
-            for (auto &it : maps)
+            std::string inZipPath = KittyUtils::Zip::GetFileInfoByDataOffset(elfBaseMap.pathname, elfBaseMap.offset).fileName;
+            if (!inZipPath.empty())
             {
-                if (it.startAddress >= _elfBase && it.endAddress <= (_elfBase + _loadSize))
-                {
-                    if (it.startAddress == _elfBase)
-                    {
-                        _base_segment = it;
-                    }
-                    _segments.push_back(it);
-                }
-
-                if (it.endAddress >= (_elfBase + _loadSize))
-                    break;
-            }
-
-            if (!_segments.empty())
-            {
-                _filepath = _base_segment.pathname;
-                _realpath = _base_segment.pathname;
-                if (!_base_segment.pathname.empty() && _base_segment.offset != 0)
-                {
-                    std::string inZipPath = KittyUtils::Zip::GetFileInfoByDataOffset(_base_segment.pathname, _base_segment.offset).fileName;
-                    if (!inZipPath.empty())
-                    {
-                        _realpath += '!';
-                        _realpath += inZipPath;
-                    }
-                }
-
-                for (const auto &it : _segments)
-                {
-                    if ((bss_start && bss_end && it.startAddress >= bss_start && it.endAddress <= bss_end) || it.pathname == "[anon:.bss]")
-                    {
-                        _bss_segments.push_back(it);
-                    }
-                }
+                _realpath += '!';
+                _realpath += inZipPath;
             }
         }
     }
@@ -575,15 +553,6 @@ namespace KittyScanner
                 _loadSize = max_vaddr - min_vaddr;
             }
 
-            uintptr_t seg_start = load_vaddr + _loadBias;
-            uintptr_t seg_mem_end = KT_PAGE_END((seg_start + load_memsz));
-            uintptr_t seg_file_end = KT_PAGE_END((seg_start + load_filesz));
-            if (seg_mem_end > seg_file_end)
-            {
-                bss_start = seg_file_end;
-                bss_end = seg_mem_end;
-            }
-
             // read all dynamics
             for (auto &phdr : _phdrs)
             {
@@ -644,35 +613,51 @@ namespace KittyScanner
             fix_table_address(_gnuHashTable);
 
         } while (false);
+    }
 
-        if (_loadSize)
+    KittyMemory::ProcMap ElfScanner::baseSegment() const
+    {
+        return KittyMemory::getAddressMap(_elfBase);
+    }
+
+    std::vector<KittyMemory::ProcMap> ElfScanner::segments() const
+    {
+        std::vector<KittyMemory::ProcMap> maps;
+        if (_elfBase && _loadSize)
         {
-            for (auto &it : maps)
+            for (const auto &it : KittyMemory::getAllMaps())
             {
                 if (it.startAddress >= _elfBase && it.endAddress <= (_elfBase + _loadSize))
                 {
-                    if (it.startAddress == _elfBase)
-                    {
-                        _base_segment = it;
-                    }
-                    _segments.push_back(it);
+                    maps.push_back(it);
                 }
 
                 if (it.endAddress >= (_elfBase + _loadSize))
                     break;
             }
+        }
+        return maps;
+    }
 
-            if (!_segments.empty())
+    std::vector<KittyMemory::ProcMap> ElfScanner::bssSegments() const
+    {
+        std::vector<KittyMemory::ProcMap> maps;
+        if (_elfBase && _loadSize)
+        {
+            for (const auto &it : KittyMemory::getAllMaps())
             {
-                for (const auto &it : _segments)
+                if (it.startAddress >= _elfBase && it.endAddress <= (_elfBase + _loadSize))
                 {
-                    if ((bss_start && bss_end && it.startAddress >= bss_start && it.endAddress <= bss_end) || it.pathname == "[anon:.bss]")
+                    if (it.inode == 0 && !it.executable && (it.pathname.empty() || it.pathname == "[anon:.bss]"))
                     {
-                        _bss_segments.push_back(it);
+                        maps.push_back(it);
                     }
                 }
+                if (it.endAddress >= (_elfBase + _loadSize))
+                    break;
             }
         }
+        return maps;
     }
 
     uintptr_t ElfScanner::findSymbol(const std::string &symbolName) const
@@ -719,14 +704,15 @@ namespace KittyScanner
             };
 
             KittyUtils::Zip::ZipFileMMap mmap_info = {nullptr, 0};
-            if (isZipped())
+            auto baseSeg = baseSegment();
+            if (baseSeg.offset != 0)
             {
-                mmap_info = KittyUtils::Zip::MMapFileByDataOffset(_filepath, _base_segment.offset);
+                mmap_info = KittyUtils::Zip::MMapFileByDataOffset(_filepath, baseSeg.offset);
             }
             else
             {
                 errno = 0;
-                int fd = open(_filepath.c_str(), O_RDONLY);
+                int fd = KT_EINTR_RETRY(open(_filepath.c_str(), O_RDONLY));
                 if (fd < 0)
                 {
                     KITTY_LOGD("Failed to open file <%s> err(%d)", _filepath.c_str(), errno);
@@ -875,6 +861,97 @@ namespace KittyScanner
         return fn;
     }
 
+    std::vector<ElfScanner> ElfScanner::GetAllELFs()
+    {
+        static std::unordered_map<uintptr_t, ElfScanner> cached_elfs;
+        std::vector<ElfScanner> elfs;
+
+        auto const maps = KittyMemory::getAllMaps();
+        if (maps.empty())
+        {
+            KITTY_LOGD("GetAllELFs: Failed to get process maps.");
+            return elfs;
+        }
+
+        uintptr_t lastElfEndAddr = 0;
+
+        for (const auto &it : maps)
+        {
+            if (cached_elfs.count(it.startAddress) > 0)
+            {
+                auto cached_elf = cached_elfs[it.startAddress];
+                if (cached_elf.filePath() == it.pathname)
+                {
+                    elfs.push_back(cached_elf);
+                    lastElfEndAddr = cached_elf.end();
+                }
+                continue;
+            }
+#ifdef __LP64__
+            if (it.startAddress >= 0x7fffffff0000)
+                continue;
+#else
+            if (it.startAddress >= 0xfffff0000)
+                continue;
+#endif
+            if (!it.readable || it.is_shared || !it.isValid() || it.startAddress < lastElfEndAddr)
+                continue;
+
+            if (((it.pathname.empty() || it.inode == 0) && it.pathname != "[vdso]") || it.pathname == "cfi shadow")
+                continue;
+
+            if (KittyUtils::String::StartsWith(it.pathname, "/dev/") || KittyUtils::String::StartsWith(it.pathname, "/system/etc/"))
+                continue;
+
+            const std::string fileExtension = KittyUtils::fileExtension(it.pathname);
+            if (!fileExtension.empty() && fileExtension != "so" && fileExtension != "apk" && fileExtension != "zip")
+                continue;
+
+            auto elf = ElfScanner(it.startAddress, maps);
+            if (elf.isValid())
+            {
+                lastElfEndAddr = elf.end();
+                elfs.push_back(elf);
+                cached_elfs[it.startAddress] = elf;
+            }
+        }
+
+        return elfs;
+    }
+
+    std::vector<ElfScanner> ElfScanner::GetAppELFs()
+    {
+        std::vector<ElfScanner> elfs;
+
+        const auto allElfs = GetAllELFs();
+        for (const auto &it : allElfs)
+        {
+            if (it.isValid() && KittyUtils::String::StartsWith(it.realPath(), "/data/app/"))
+            {
+                elfs.push_back(it);
+            }
+        }
+
+        return elfs;
+    }
+
+    std::vector<ElfScanner> ElfScanner::GetEmulatedELFs()
+    {
+        auto proc_e_machine = GetProgramElf().header().e_machine;
+
+        std::vector<ElfScanner> elfs;
+
+        const auto allElfs = ElfScanner::GetAllELFs();
+        for (const auto &it : allElfs)
+        {
+            if (it.isValid() && it.header().e_machine != proc_e_machine)
+            {
+                elfs.push_back(it);
+            }
+        }
+        return elfs;
+    }
+
     ElfScanner ElfScanner::findElf(const std::string &path)
     {
         ElfScanner ret{};
@@ -936,63 +1013,19 @@ namespace KittyScanner
         return ret;
     }
 
-    std::vector<ElfScanner> ElfScanner::GetAllELFs()
+    ElfScanner ElfScanner::GetProgramElf()
     {
-        std::vector<ElfScanner> elfs;
-
-        auto maps = KittyMemory::getAllMaps();
-        if (maps.empty())
+        const char *path = "/proc/self/exe";
+        char exePath[0xff] = {0};
+        errno = 0;
+        int ret = int(KT_EINTR_RETRY(readlink(path, exePath, 0xff)));
+        if (ret == -1)
         {
-            KITTY_LOGD("GetAllELFs: Failed to get process maps.");
-            return elfs;
+            int err = errno;
+            KITTY_LOGE("Failed to readlink \"%s\", error(%d): %s.", path, err, strerror(err));
+            return {};
         }
-
-        uintptr_t lastElfEndAddr = 0;
-
-        for (auto &it : maps)
-        {
-            if (!it.isValid() || it.startAddress < lastElfEndAddr || !it.readable || it.pathname == "cfi shadow" || !it.isValidELF())
-                continue;
-
-            auto elf = ElfScanner(it.startAddress, maps);
-            if (elf.isValid())
-            {
-                lastElfEndAddr = elf.end();
-                elfs.push_back(elf);
-            }
-        }
-
-        return elfs;
-    }
-
-    std::vector<ElfScanner> ElfScanner::GetAppELFs()
-    {
-        std::vector<ElfScanner> elfs;
-
-        auto allMaps = KittyMemory::getAllMaps();
-        auto maps = KittyMemory::getMapsContain("/data/app/");
-        if (maps.empty())
-        {
-            KITTY_LOGD("GetAppELFs: Failed to get process maps.");
-            return elfs;
-        }
-
-        uintptr_t lastElfEndAddr = 0;
-
-        for (auto &it : maps)
-        {
-            if (!it.isValid() || it.startAddress < lastElfEndAddr || !it.readable || it.pathname == "cfi shadow" || !it.isValidELF())
-                continue;
-
-            auto elf = ElfScanner(it.startAddress, allMaps);
-            if (elf.isValid())
-            {
-                lastElfEndAddr = elf.end();
-                elfs.push_back(elf);
-            }
-        }
-
-        return elfs;
+        return findElf(exePath);
     }
 
     std::vector<std::pair<uintptr_t, ElfScanner>> ElfScanner::findSymbolAll(const std::string &symbolName)
