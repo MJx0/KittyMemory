@@ -40,6 +40,7 @@ void test_thread()
     
     KITTY_LOGI("==================== MEMORY PATCH ===================");
     
+#ifndef kNO_KEYSTONE
     // with asm (uses keystone assembler) insert ';' to seperate statements
     // its recommeneded to test your instructions on https://armconverter.com or https://shell-storm.org/online/Online-Assembler-and-Disassembler/
     // change MP_ASM_ARM64 to your targeted asm arch
@@ -49,7 +50,7 @@ void test_thread()
     // format asm
     std::string asm_fmt = KittyUtils::String::Fmt("mov x0, #%d; ret", 65536);
     gPatches.get_gold = MemoryPatch::createWithAsm(unityBase + 0xE4EB8, MP_ASM_ARM64, asm_fmt);
-    //gPatches.get_gold.Modify();
+#endif
     
     
     // hex with or without spaces both are fine
