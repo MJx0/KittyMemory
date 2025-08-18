@@ -1,11 +1,13 @@
 #include "KittyScanner.hpp"
+#include "KittyPtrValidator.hpp"
+#include <cstdint>
+#include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include "KittyPtrValidator.hpp"
 
 #ifdef __ANDROID__
-#include <unordered_map>
 #include <dlfcn.h>
+#include <unordered_map>
 #endif
 
 #include "KittyUtils.hpp"
@@ -26,8 +28,7 @@ namespace KittyScanner
         return !*mask;
     }
 
-    uintptr_t findInRange(const uintptr_t start, const uintptr_t end,
-                          const char *pattern, const std::string &mask)
+    uintptr_t findInRange(const uintptr_t start, const uintptr_t end, const char *pattern, const std::string &mask)
     {
         const size_t scan_size = mask.length();
 
@@ -50,8 +51,8 @@ namespace KittyScanner
         return 0;
     }
 
-    std::vector<uintptr_t> findBytesAll(const uintptr_t start, const uintptr_t end,
-                                        const char *bytes, const std::string &mask)
+    std::vector<uintptr_t> findBytesAll(const uintptr_t start, const uintptr_t end, const char *bytes,
+                                        const std::string &mask)
     {
         std::vector<uintptr_t> list;
 
@@ -62,10 +63,12 @@ namespace KittyScanner
         const size_t scan_size = mask.length();
         do
         {
-            if (!list.empty()) curr_search_address = list.back() + scan_size;
+            if (!list.empty())
+                curr_search_address = list.back() + scan_size;
 
             uintptr_t found = findInRange(curr_search_address, end, bytes, mask);
-            if (!found) break;
+            if (!found)
+                break;
 
             list.push_back(found);
         } while (true);
@@ -81,14 +84,17 @@ namespace KittyScanner
         return findInRange(start, end, bytes, mask);
     }
 
-    std::vector<uintptr_t> findHexAll(const uintptr_t start, const uintptr_t end, std::string hex, const std::string &mask)
+    std::vector<uintptr_t> findHexAll(const uintptr_t start, const uintptr_t end, std::string hex,
+                                      const std::string &mask)
     {
         std::vector<uintptr_t> list;
 
-        if (start >= end || mask.empty() || !KittyUtils::String::ValidateHex(hex)) return list;
+        if (start >= end || mask.empty() || !KittyUtils::String::ValidateHex(hex))
+            return list;
 
         const size_t scan_size = mask.length();
-        if ((hex.length() / 2) != scan_size) return list;
+        if ((hex.length() / 2) != scan_size)
+            return list;
 
         std::vector<char> pattern(scan_size);
         KittyUtils::dataFromHex(hex, &pattern[0]);
@@ -99,10 +105,12 @@ namespace KittyScanner
 
     uintptr_t findHexFirst(const uintptr_t start, const uintptr_t end, std::string hex, const std::string &mask)
     {
-        if (start >= end || mask.empty() || !KittyUtils::String::ValidateHex(hex)) return 0;
+        if (start >= end || mask.empty() || !KittyUtils::String::ValidateHex(hex))
+            return 0;
 
         const size_t scan_size = mask.length();
-        if ((hex.length() / 2) != scan_size) return 0;
+        if ((hex.length() / 2) != scan_size)
+            return 0;
 
         std::vector<char> pattern(scan_size);
         KittyUtils::dataFromHex(hex, &pattern[0]);
@@ -123,7 +131,8 @@ namespace KittyScanner
         const size_t pattren_len = pattern.length();
         for (std::size_t i = 0; i < pattren_len; i++)
         {
-            if (pattern[i] == ' ') continue;
+            if (pattern[i] == ' ')
+                continue;
 
             if (pattern[i] == '?')
             {
@@ -155,7 +164,8 @@ namespace KittyScanner
         const size_t pattren_len = pattern.length();
         for (std::size_t i = 0; i < pattren_len; i++)
         {
-            if (pattern[i] == ' ') continue;
+            if (pattern[i] == ' ')
+                continue;
 
             if (pattern[i] == '?')
             {
@@ -227,11 +237,8 @@ namespace KittyScanner
         _headerless = false;
         _dsymbols_init = false;
 
-        if (!elfBase)
-            return;
-
         // verify address
-        auto elfBaseMap = KittyMemory::getAddressMap(maps, elfBase);
+        auto elfBaseMap = KittyMemory::getAddressMap(elfBase, maps);
         if (!elfBaseMap.isValid() || !elfBaseMap.readable || elfBase != elfBaseMap.startAddress)
         {
             KITTY_LOGD("ElfScanner: (%p) is not a valid ELF base address.", (void *)elfBase);
@@ -250,6 +257,13 @@ namespace KittyScanner
         // read ELF header
         _ehdr = *(KT_ElfW(Ehdr) *)_elfBase;
 
+        // check ELF bit
+        if (_ehdr.e_ident[EI_CLASS] != KT_ELF_EICLASS)
+        {
+            KITTY_LOGD("ElfScanner: ELF class mismatch (%p).", (void *)_elfBase);
+            return;
+        }
+
         if (_ehdr.e_ident[EI_DATA] != ELFDATA2LSB)
         {
             KITTY_LOGD("ElfScanner: (%p) data encoding is not little endian.", (void *)elfBase);
@@ -264,16 +278,12 @@ namespace KittyScanner
 
         if (_ehdr.e_type != ET_EXEC && _ehdr.e_type != ET_DYN)
         {
-            KITTY_LOGD("ElfScanner: (%p) is not a executable or dynamic library.", (void *)elfBase);
+            KITTY_LOGD("ElfScanner: (%p) is not a executable or dynamic "
+                       "library.",
+                       (void *)elfBase);
             return;
         }
 
-        // check ELF bit
-        if (_ehdr.e_ident[EI_CLASS] != KT_ELF_EICLASS)
-        {
-            KITTY_LOGD("ElfScanner: ELF class mismatch (%p).", (void *)_elfBase);
-            return;
-        }
         // check common header values
         if (!_ehdr.e_phoff || !_ehdr.e_phnum || !_ehdr.e_phentsize || !_ehdr.e_shnum || !_ehdr.e_shentsize)
         {
@@ -281,9 +291,10 @@ namespace KittyScanner
             return;
         }
 
-        if (!KittyMemory::getAddressMap(maps, _elfBase + _ehdr.e_phoff).readable)
+        if (!KittyMemory::getAddressMap(_elfBase + _ehdr.e_phoff, maps).readable)
         {
-            KITTY_LOGD("ElfScanner: Invalid phdr (%p + %p) = %p.", (void *)_elfBase, (void *)_ehdr.e_phoff, (void *)(_elfBase + _ehdr.e_phoff));
+            KITTY_LOGD("ElfScanner: Invalid phdr (%p + %p) = %p.", (void *)_elfBase, (void *)_ehdr.e_phoff,
+                       (void *)(_elfBase + _ehdr.e_phoff));
             return;
         }
 
@@ -294,7 +305,7 @@ namespace KittyScanner
         uintptr_t load_vaddr = 0, load_memsz = 0, load_filesz = 0;
         for (KT_ElfW(Half) i = 0; i < _ehdr.e_phnum; i++)
         {
-            if (!KittyMemory::getAddressMap(maps, _phdr + (i * _ehdr.e_phentsize)).readable)
+            if (!KittyMemory::getAddressMap(_phdr + (i * _ehdr.e_phentsize), maps).readable)
                 continue;
 
             KT_ElfW(Phdr) phdr_entry = {};
@@ -325,7 +336,7 @@ namespace KittyScanner
 
         if (!max_vaddr)
         {
-            KITTY_LOGD("ElfScanner: failed to find load size for ELF (%p).", (void *)_elfBase);
+            KITTY_LOGD("ElfScanner: failed to find max_vaddr for ELF (%p).", (void *)_elfBase);
             return;
         }
 
@@ -335,6 +346,49 @@ namespace KittyScanner
         _loadBias = _elfBase - min_vaddr;
         _loadSize = max_vaddr - min_vaddr;
 
+        uintptr_t seg_start = load_vaddr + _loadBias;
+        uintptr_t seg_mem_end = KT_PAGE_END((seg_start + load_memsz));
+        uintptr_t seg_file_end = KT_PAGE_END((seg_start + load_filesz));
+        uintptr_t bss_start = 0, bss_end = 0;
+        if (seg_mem_end > seg_file_end)
+        {
+            bss_start = seg_file_end;
+            bss_end = seg_mem_end;
+        }
+
+        for (const auto &it : maps)
+        {
+            if (it.startAddress >= _elfBase && it.endAddress <= (_elfBase + _loadSize))
+            {
+                /*if ((elfBaseMap.inode != 0 && it.inode != 0 && it.inode != elfBaseMap.inode) ||
+                    (elfBaseMap.inode == 0 && it.inode != 0))
+                {
+                    _loadSize = 0;
+                    KITTY_LOGD("ElfScanner: failed to find calculate load "
+                               "size for ELF (%p).",
+                               (void *)_elfBase);
+                    return;
+                }*/
+
+                if (it.startAddress == _elfBase)
+                {
+                    _baseSegment = it;
+                }
+
+                _segments.push_back(it);
+
+                if (it.readable && !it.executable &&
+                    (it.pathname == "[anon:.bss]" || (elfBaseMap.inode != 0 && it.inode == 0) ||
+                     (it.startAddress >= bss_start && it.endAddress <= bss_end)))
+                {
+                    _bssSegments.push_back(it);
+                }
+            }
+
+            if (it.endAddress >= (_elfBase + _loadSize))
+                break;
+        }
+
         // read all dynamics
         for (auto &phdr : _phdrs)
         {
@@ -342,9 +396,9 @@ namespace KittyScanner
             {
                 if (phdr.p_vaddr == 0 || phdr.p_memsz == 0)
                     break;
-                if (!KittyMemory::getAddressMap(maps, _loadBias + phdr.p_vaddr).readable)
+                if (!KittyMemory::getAddressMap(_loadBias + phdr.p_vaddr, maps).readable)
                     break;
-                if (!KittyMemory::getAddressMap(maps, (_loadBias + phdr.p_vaddr) + phdr.p_memsz - 1).readable)
+                if (!KittyMemory::getAddressMap((_loadBias + phdr.p_vaddr) + phdr.p_memsz - 1, maps).readable)
                     break;
 
                 _dynamic = _loadBias + phdr.p_vaddr;
@@ -361,25 +415,25 @@ namespace KittyScanner
                     switch (dyn.d_tag)
                     {
                         // mandatory
-                    case DT_STRTAB:  // string table
+                    case DT_STRTAB: // string table
                         _stringTable = dyn.d_un.d_ptr;
                         break;
                         // mandatory
-                    case DT_SYMTAB:  // symbol table
+                    case DT_SYMTAB: // symbol table
                         _symbolTable = dyn.d_un.d_ptr;
                         break;
-                    case DT_HASH:  // hash table
+                    case DT_HASH: // hash table
                         _elfHashTable = dyn.d_un.d_ptr;
                         break;
-                    case DT_GNU_HASH:  // gnu hash table
+                    case DT_GNU_HASH: // gnu hash table
                         _gnuHashTable = dyn.d_un.d_ptr;
                         break;
                         // mandatory
-                    case DT_STRSZ:  // string table size
+                    case DT_STRSZ: // string table size
                         _strsz = dyn.d_un.d_val;
                         break;
                         // mandatory
-                    case DT_SYMENT:  // symbol entry size
+                    case DT_SYMENT: // symbol entry size
                         _syment = dyn.d_un.d_val;
                         break;
                     default:
@@ -388,16 +442,16 @@ namespace KittyScanner
 
                     _dynamics.push_back(dyn);
                 }
+
                 break;
             }
         }
 
-        auto fix_table_address = [&](uintptr_t &table_addr)
-        {
+        auto fix_table_address = [&](uintptr_t &table_addr) {
             if (table_addr && table_addr < _loadBias)
                 table_addr += _loadBias;
 
-            if (!KittyMemory::getAddressMap(maps, table_addr).readable)
+            if (!KittyMemory::getAddressMap(table_addr, maps).readable)
                 table_addr = 0;
         };
 
@@ -410,7 +464,8 @@ namespace KittyScanner
         _realpath = elfBaseMap.pathname;
         if (!elfBaseMap.pathname.empty() && elfBaseMap.offset != 0)
         {
-            std::string inZipPath = KittyUtils::Zip::GetFileInfoByDataOffset(elfBaseMap.pathname, elfBaseMap.offset).fileName;
+            std::string inZipPath =
+                KittyUtils::Zip::GetFileInfoByDataOffset(elfBaseMap.pathname, elfBaseMap.offset).fileName;
             if (!inZipPath.empty())
             {
                 _realpath += '!';
@@ -419,7 +474,7 @@ namespace KittyScanner
         }
     }
 
-    ElfScanner::ElfScanner(const soinfo_info_t &soinfo, const std::vector<KittyMemory::ProcMap> &maps)
+    ElfScanner::ElfScanner(const kitty_soinfo_t &soinfo, const std::vector<KittyMemory::ProcMap> &maps)
     {
         _elfBase = 0;
         _ehdr = {};
@@ -449,27 +504,36 @@ namespace KittyScanner
         _filepath = soinfo.path;
         _realpath = soinfo.realpath;
 
-        bool isLinker = KittyUtils::String::EndsWith(soinfo.path, "/linker") || KittyUtils::String::EndsWith(soinfo.path, "/linker64");
-        if ((!isLinker && (_elfBase == 0 || _loadSize == 0)) || _loadBias == 0 || _phdr == 0 || _dynamic == 0 || _stringTable == 0 || _symbolTable == 0)
+        bool isLinker = KittyUtils::String::EndsWith(soinfo.path, "/linker") ||
+                        KittyUtils::String::EndsWith(soinfo.path, "/linker64");
+        if ((!isLinker && (_elfBase == 0 || _loadSize == 0)) || _loadBias == 0 || _phdr == 0 || _dynamic == 0 ||
+            _stringTable == 0 || _symbolTable == 0)
         {
             KITTY_LOGD("ElfScanner: Invalid soinfo!");
-            KITTY_LOGD("ElfScanner: elfBase: %p | bias: %p | phdr: %p | dyn: %p | strtab=%p | symtab=%p | strsz=%p | syment=%p",
-                       (void *)_elfBase, (void *)_loadBias, (void *)_phdr, (void *)_dynamic, (void *)_stringTable, (void *)_symbolTable, (void *)_strsz, (void *)_syment);
+            KITTY_LOGD("ElfScanner: elfBase: %p | bias: %p | phdr: %p | "
+                       "dyn: %p | "
+                       "strtab=%p | symtab=%p | strsz=%p | syment=%p",
+                       (void *)_elfBase, (void *)_loadBias, (void *)_phdr, (void *)_dynamic, (void *)_stringTable,
+                       (void *)_symbolTable, (void *)_strsz, (void *)_syment);
             return;
         }
 
         // fix for linker
         if (_elfBase == 0)
-        {
-            _elfBase = KittyMemory::getAddressMap(maps, soinfo.bias).startAddress;
-        }
-
-        uintptr_t bss_start = 0, bss_end = 0;
+            _elfBase = KittyMemory::getAddressMap(soinfo.bias, maps).startAddress;
+        if (_elfBase == 0)
+            _elfBase = KittyMemory::getAddressMap(soinfo.phdr, maps).startAddress;
+        if (_elfBase == 0)
+            _elfBase = KittyMemory::getAddressMap(soinfo.dyn, maps).startAddress;
+        if (_elfBase == 0)
+            _elfBase = KittyMemory::getAddressMap(soinfo.symtab, maps).startAddress;
+        if (_elfBase == 0)
+            _elfBase = KittyMemory::getAddressMap(soinfo.strtab, maps).startAddress;
 
         do
         {
             // verify address
-            auto elfBaseMap = KittyMemory::getAddressMap(maps, _elfBase);
+            auto elfBaseMap = KittyMemory::getAddressMap(_elfBase, maps);
             if (!elfBaseMap.isValid() || !elfBaseMap.readable || _elfBase != elfBaseMap.startAddress)
             {
                 KITTY_LOGD("ElfScanner: (%p) is not a valid ELF base address.", (void *)_elfBase);
@@ -481,7 +545,9 @@ namespace KittyScanner
             {
                 // maybe protected
                 _headerless = true;
-                KITTY_LOGD("ElfScanner: failed to read ELF header for soinfo(%p).", (void *)_elfBase);
+                KITTY_LOGD("ElfScanner: failed to read ELF header for "
+                           "soinfo(%p).",
+                           (void *)_elfBase);
                 break;
             }
 
@@ -499,9 +565,15 @@ namespace KittyScanner
                 break;
             }
 
-            if (!KittyMemory::getAddressMap(maps, _phdr).readable)
+            if (_phdr == 0)
             {
-                KITTY_LOGD("ElfScanner: Invalid phdr (%p + %p) = %p.", (void *)_elfBase, (void *)_ehdr.e_phoff, (void *)_phdr);
+                _phdr = _elfBase + _ehdr.e_phoff;
+            }
+
+            if (!KittyMemory::getAddressMap(_phdr, maps).readable)
+            {
+                KITTY_LOGD("ElfScanner: Invalid phdr (%p + %p) = %p.", (void *)_elfBase, (void *)_ehdr.e_phoff,
+                           (void *)_phdr);
                 break;
             }
 
@@ -509,7 +581,7 @@ namespace KittyScanner
             uintptr_t load_vaddr = 0, load_memsz = 0, load_filesz = 0;
             for (KT_ElfW(Half) i = 0; i < _ehdr.e_phnum; i++)
             {
-                if (!KittyMemory::getAddressMap(maps, _phdr + (i * _ehdr.e_phentsize)).readable)
+                if (!KittyMemory::getAddressMap(_phdr + (i * _ehdr.e_phentsize), maps).readable)
                     continue;
 
                 KT_ElfW(Phdr) phdr_entry = {};
@@ -540,7 +612,7 @@ namespace KittyScanner
 
             if (!max_vaddr)
             {
-                KITTY_LOGD("ElfScanner: failed to find load size for ELF (%p).", (void *)_elfBase);
+                KITTY_LOGD("ElfScanner: failed to find max_vaddr for ELF (%p).", (void *)_elfBase);
                 break;
             }
 
@@ -553,16 +625,62 @@ namespace KittyScanner
                 _loadSize = max_vaddr - min_vaddr;
             }
 
+            uintptr_t seg_start = load_vaddr + _loadBias;
+            uintptr_t seg_mem_end = KT_PAGE_END((seg_start + load_memsz));
+            uintptr_t seg_file_end = KT_PAGE_END((seg_start + load_filesz));
+            uintptr_t bss_start = 0, bss_end = 0;
+            if (seg_mem_end > seg_file_end)
+            {
+                bss_start = seg_file_end;
+                bss_end = seg_mem_end;
+            }
+
+            for (const auto &it : maps)
+            {
+                if (it.startAddress >= _elfBase && it.endAddress <= (_elfBase + _loadSize))
+                {
+                    /*if ((elfBaseMap.inode != 0 && it.inode != 0 && it.inode != elfBaseMap.inode) ||
+                        (elfBaseMap.inode == 0 && it.inode != 0))
+                    {
+                        _loadSize = 0;
+                        KITTY_LOGD("ElfScanner: failed to find calculate load "
+                                   "size for ELF (%p).",
+                                   (void *)_elfBase);
+                        return;
+                    }*/
+
+                    if (it.startAddress == _elfBase)
+                    {
+                        _baseSegment = it;
+                    }
+
+                    _segments.push_back(it);
+
+                    if (it.readable && !it.executable &&
+                        (it.pathname == "[anon:.bss]" || (elfBaseMap.inode != 0 && it.inode == 0) ||
+                         (it.startAddress >= bss_start && it.endAddress <= bss_end)))
+                    {
+                        _bssSegments.push_back(it);
+                    }
+                }
+
+                if (it.endAddress >= (_elfBase + _loadSize))
+                    break;
+            }
+
             // read all dynamics
             for (auto &phdr : _phdrs)
             {
                 if (phdr.p_type == PT_DYNAMIC)
                 {
+                    if (_dynamic == 0 && phdr.p_vaddr)
+                        _dynamic = _loadBias + phdr.p_vaddr;
+
                     if (_dynamic == 0 || phdr.p_memsz == 0)
                         break;
-                    if (!KittyMemory::getAddressMap(maps, _dynamic).readable)
+                    if (!KittyMemory::getAddressMap(_dynamic, maps).readable)
                         break;
-                    if (!KittyMemory::getAddressMap(maps, _dynamic + phdr.p_memsz - 1).readable)
+                    if (!KittyMemory::getAddressMap(_dynamic + phdr.p_memsz - 1, maps).readable)
                         break;
 
                     std::vector<KT_ElfW(Dyn)> dyn_buff(phdr.p_memsz / sizeof(KT_ElfW(Dyn)));
@@ -575,19 +693,25 @@ namespace KittyScanner
 
                         switch (dyn.d_tag)
                         {
+                        case DT_STRTAB:
+                            if (_stringTable == 0)
+                                _stringTable = dyn.d_un.d_ptr;
+                            break;
+                        case DT_SYMTAB:
+                            if (_symbolTable == 0)
+                                _symbolTable = dyn.d_un.d_ptr;
+                            break;
                         case DT_STRSZ:
                             if (_strsz == 0)
-                            {
                                 _strsz = dyn.d_un.d_val;
-                            }
                             break;
                         case DT_SYMENT:
                             _syment = dyn.d_un.d_val;
                             break;
-                        case DT_HASH:  // hash table
+                        case DT_HASH: // hash table
                             _elfHashTable = dyn.d_un.d_ptr;
                             break;
-                        case DT_GNU_HASH:  // gnu hash table
+                        case DT_GNU_HASH: // gnu hash table
                             _gnuHashTable = dyn.d_un.d_ptr;
                             break;
                         default:
@@ -596,83 +720,40 @@ namespace KittyScanner
 
                         _dynamics.push_back(dyn);
                     }
+
                     break;
                 }
             }
 
-            auto fix_table_address = [&](uintptr_t &table_addr)
-            {
+            auto fix_table_address = [&](uintptr_t &table_addr) {
                 if (table_addr && table_addr < _loadBias)
                     table_addr += _loadBias;
 
-                if (!KittyMemory::getAddressMap(maps, table_addr).readable)
+                if (!KittyMemory::getAddressMap(table_addr, maps).readable)
                     table_addr = 0;
             };
 
-            fix_table_address(_elfHashTable);
+            fix_table_address(_symbolTable);
+            fix_table_address(_stringTable);
+            fix_table_address(_gnuHashTable);
             fix_table_address(_gnuHashTable);
 
         } while (false);
-    }
-
-    KittyMemory::ProcMap ElfScanner::baseSegment() const
-    {
-        return KittyMemory::getAddressMap(_elfBase);
-    }
-
-    std::vector<KittyMemory::ProcMap> ElfScanner::segments() const
-    {
-        std::vector<KittyMemory::ProcMap> maps;
-        if (_elfBase && _loadSize)
-        {
-            for (const auto &it : KittyMemory::getAllMaps())
-            {
-                if (it.startAddress >= _elfBase && it.endAddress <= (_elfBase + _loadSize))
-                {
-                    maps.push_back(it);
-                }
-
-                if (it.endAddress >= (_elfBase + _loadSize))
-                    break;
-            }
-        }
-        return maps;
-    }
-
-    std::vector<KittyMemory::ProcMap> ElfScanner::bssSegments() const
-    {
-        std::vector<KittyMemory::ProcMap> maps;
-        if (_elfBase && _loadSize)
-        {
-            for (const auto &it : KittyMemory::getAllMaps())
-            {
-                if (it.startAddress >= _elfBase && it.endAddress <= (_elfBase + _loadSize))
-                {
-                    if (it.inode == 0 && !it.executable && (it.pathname.empty() || it.pathname == "[anon:.bss]"))
-                    {
-                        maps.push_back(it);
-                    }
-                }
-                if (it.endAddress >= (_elfBase + _loadSize))
-                    break;
-            }
-        }
-        return maps;
     }
 
     uintptr_t ElfScanner::findSymbol(const std::string &symbolName) const
     {
         if (_loadBias && _stringTable && _symbolTable && _strsz && _syment)
         {
-            auto get_sym_address = [&](const KT_ElfW(Sym) * sym_ent) -> uintptr_t
-            {
+            auto get_sym_address = [&](const KT_ElfW(Sym) * sym_ent) -> uintptr_t {
                 return sym_ent->st_value < _loadBias ? _loadBias + sym_ent->st_value : sym_ent->st_value;
             };
 
             // try gnu hash first
             if (_gnuHashTable)
             {
-                const auto *sym = KittyUtils::Elf::GnuHash::LookupByName(_gnuHashTable, _symbolTable, _stringTable, _syment, _strsz, symbolName.c_str());
+                const auto *sym = KittyUtils::Elf::GnuHash::LookupByName(_gnuHashTable, _symbolTable, _stringTable,
+                                                                         _syment, _strsz, symbolName.c_str());
                 if (sym && sym->st_value)
                 {
                     return get_sym_address(sym);
@@ -681,7 +762,8 @@ namespace KittyScanner
 
             if (_elfHashTable)
             {
-                const auto *sym = KittyUtils::Elf::ElfHash::LookupByName(_elfHashTable, _symbolTable, _stringTable, _syment, _strsz, symbolName.c_str());
+                const auto *sym = KittyUtils::Elf::ElfHash::LookupByName(_elfHashTable, _symbolTable, _stringTable,
+                                                                         _syment, _strsz, symbolName.c_str());
                 if (sym && sym->st_value)
                 {
                     return get_sym_address(sym);
@@ -698,8 +780,7 @@ namespace KittyScanner
         {
             _dsymbols_init = true;
 
-            auto get_sym_address = [&](const KT_ElfW(Sym) * sym_ent) -> uintptr_t
-            {
+            auto get_sym_address = [&](const KT_ElfW(Sym) * sym_ent) -> uintptr_t {
                 return sym_ent->st_value < _loadBias ? _loadBias + sym_ent->st_value : sym_ent->st_value;
             };
 
@@ -740,8 +821,7 @@ namespace KittyScanner
                 return _dsymbolsMap;
             }
 
-            auto cleanup = [&]
-            { munmap(mmap_info.data, mmap_info.size); };
+            auto cleanup = [&] { munmap(mmap_info.data, mmap_info.size); };
 
             KT_ElfW(Ehdr) *ehdr = static_cast<KT_ElfW(Ehdr) *>(mmap_info.data);
 
@@ -752,23 +832,27 @@ namespace KittyScanner
                 return _dsymbolsMap;
             }
 
-            if (ehdr->e_phoff == 0 || ehdr->e_phentsize == 0 || ehdr->e_phnum == 0 || ehdr->e_phoff + ehdr->e_phnum * sizeof(KT_ElfW(Phdr)) > mmap_info.size)
+            if (ehdr->e_phoff == 0 || ehdr->e_phentsize == 0 || ehdr->e_phnum == 0 ||
+                ehdr->e_phoff + ehdr->e_phnum * sizeof(KT_ElfW(Phdr)) > mmap_info.size)
             {
                 KITTY_LOGD("Invalid program header table in <%s>", filePath().c_str());
                 cleanup();
                 return _dsymbolsMap;
             }
 
-            if (ehdr->e_shoff == 0 || ehdr->e_shentsize == 0 || ehdr->e_shnum == 0 || ehdr->e_shoff + ehdr->e_shnum * sizeof(KT_ElfW(Shdr)) > mmap_info.size)
+            if (ehdr->e_shoff == 0 || ehdr->e_shentsize == 0 || ehdr->e_shnum == 0 ||
+                ehdr->e_shoff + ehdr->e_shnum * sizeof(KT_ElfW(Shdr)) > mmap_info.size)
             {
                 KITTY_LOGD("Invalid section header table in <%s>", filePath().c_str());
                 cleanup();
                 return _dsymbolsMap;
             }
 
-            const KT_ElfW(Shdr) *shdr = reinterpret_cast<KT_ElfW(Shdr) *>(static_cast<char *>(mmap_info.data) + ehdr->e_shoff);
+            const KT_ElfW(Shdr) *shdr = reinterpret_cast<KT_ElfW(Shdr) *>(static_cast<char *>(mmap_info.data) +
+                                                                          ehdr->e_shoff);
             const KT_ElfW(Shdr) *shstrtab_shdr = shdr + ehdr->e_shstrndx;
-            const char *sectionstr = reinterpret_cast<char *>(static_cast<char *>(mmap_info.data) + shstrtab_shdr->sh_offset);
+            const char *sectionstr = reinterpret_cast<char *>(static_cast<char *>(mmap_info.data) +
+                                                              shstrtab_shdr->sh_offset);
             for (uint16_t i = 0; i < ehdr->e_shnum; ++i)
             {
                 if (shdr[i].sh_type != SHT_SYMTAB)
@@ -782,10 +866,12 @@ namespace KittyScanner
                     (shdr[shdr[i].sh_link].sh_offset + shdr[shdr[i].sh_link].sh_size) > mmap_info.size)
                     continue;
 
-                const KT_ElfW(Sym) *symtab = reinterpret_cast<KT_ElfW(Sym) *>(static_cast<char *>(mmap_info.data) + shdr[i].sh_offset);
+                const KT_ElfW(Sym) *symtab = reinterpret_cast<KT_ElfW(Sym) *>(static_cast<char *>(mmap_info.data) +
+                                                                              shdr[i].sh_offset);
                 const size_t symCount = shdr[i].sh_size / shdr[i].sh_entsize;
                 const KT_ElfW(Shdr) *strtabShdr = &shdr[shdr[i].sh_link];
-                const char *strtab = reinterpret_cast<char *>(static_cast<char *>(mmap_info.data) + strtabShdr->sh_offset);
+                const char *strtab = reinterpret_cast<char *>(static_cast<char *>(mmap_info.data) +
+                                                              strtabShdr->sh_offset);
 
                 for (size_t j = 0; j < symCount; ++j)
                 {
@@ -796,7 +882,8 @@ namespace KittyScanner
                     if (intptr_t(curr_sym->st_value) <= 0 || intptr_t(curr_sym->st_size) <= 0)
                         continue;
 
-                    if (KT_ELF_ST_TYPE(curr_sym->st_info) != STT_OBJECT && KT_ELF_ST_TYPE(curr_sym->st_info) != STT_FUNC)
+                    if (KT_ELF_ST_TYPE(curr_sym->st_info) != STT_OBJECT &&
+                        KT_ELF_ST_TYPE(curr_sym->st_info) != STT_FUNC)
                         continue;
 
                     std::string sym_str = std::string(reinterpret_cast<const char *>(strtab + curr_sym->st_name));
@@ -829,13 +916,16 @@ namespace KittyScanner
             if (it.is_ro || it.is_rx)
             {
                 string_loc = KittyScanner::findDataFirst(it.startAddress, it.endAddress, name.data(), name.length());
-                if (string_loc) break;
+                if (string_loc)
+                    break;
             }
         }
 
         if (!string_loc)
         {
-            KITTY_LOGD("findRegisterNativeFn: Couldn't find string (%s) in selected maps", name.c_str());
+            KITTY_LOGD("findRegisterNativeFn: Couldn't find string (%s) "
+                       "in selected maps",
+                       name.c_str());
             return fn;
         }
 
@@ -845,114 +935,184 @@ namespace KittyScanner
         {
             if (it.is_rw)
             {
-                string_xref = KittyScanner::findDataFirst(it.startAddress, it.endAddress, &string_loc, sizeof(uintptr_t));
-                if (!string_xref) continue;
+                string_xref = KittyScanner::findDataFirst(it.startAddress, it.endAddress, &string_loc,
+                                                          sizeof(uintptr_t));
+                if (!string_xref)
+                    continue;
 
-                KITTY_LOGD("findRegisterNativeFn: String at (%p) referenced at %p", (void *)string_loc, (void *)string_xref);
+                KITTY_LOGD("findRegisterNativeFn: String at (%p) "
+                           "referenced at %p",
+                           (void *)string_loc, (void *)string_xref);
 
                 fn_loc = string_xref;
                 break;
             }
         }
 
-        if (!fn_loc) return fn;
+        if (!fn_loc)
+            return fn;
 
         memcpy(&fn, (void *)fn_loc, sizeof(RegisterNativeFn));
         return fn;
     }
 
-    std::vector<ElfScanner> ElfScanner::GetAllELFs()
+    ElfScanner &ElfScanner::getProgramElf()
     {
-        static std::unordered_map<uintptr_t, ElfScanner> cached_elfs;
+        static ElfScanner progElf{};
+        if (!progElf.isValid() || !progElf.dynamic())
+        {
+            const char *path = "/proc/self/exe";
+            char exePath[0xff] = {0};
+            errno = 0;
+            int ret = int(KT_EINTR_RETRY(readlink(path, exePath, 0xff)));
+            if (ret == -1)
+            {
+                int err = errno;
+                KITTY_LOGE("Failed to readlink \"%s\", error(%d): %s.", path, err, strerror(err));
+                return progElf;
+            }
+
+            const auto allMaps = KittyMemory::getAllMaps();
+            const auto maps = KittyMemory::getMaps(KittyMemory::EProcMapFilter::Equal, exePath, allMaps);
+            for (const auto &it : maps)
+            {
+                progElf = ElfScanner(it.startAddress, allMaps);
+                if (progElf.isValid() && progElf.dynamic())
+                    break;
+            }
+        }
+        return progElf;
+    }
+
+    std::vector<ElfScanner> ElfScanner::getAllELFs(EScanElfType type, EScanElfFilter filter)
+    {
+        static thread_local std::unordered_map<uintptr_t, ElfScanner> cached_elfs;
         std::vector<ElfScanner> elfs;
 
-        auto const maps = KittyMemory::getAllMaps();
+        const auto progMachine = getProgramElf().header().e_machine;
+        static auto eMachineCheck = [](EScanElfType type, int a, int b) -> bool {
+            return a == 0 || b == 0 || type == EScanElfType::Any || (type == EScanElfType::Native && a == b) ||
+                   (type == EScanElfType::Emulated && a != b);
+        };
+
+        const bool isAppFilter = filter == EScanElfFilter::App;
+        const bool isSysFilter = filter == EScanElfFilter::System;
+
+        std::vector<KittyMemory::ProcMap> maps = KittyMemory::getAllMaps();
         if (maps.empty())
         {
-            KITTY_LOGD("GetAllELFs: Failed to get process maps.");
+            KITTY_LOGD("getAllELFs: Failed to get process maps.");
             return elfs;
         }
 
-        uintptr_t lastElfEndAddr = 0;
+        unsigned long lastElfNode = 0;
 
         for (const auto &it : maps)
         {
-            if (cached_elfs.count(it.startAddress) > 0)
-            {
-                auto cached_elf = cached_elfs[it.startAddress];
-                if (cached_elf.filePath() == it.pathname)
-                {
-                    elfs.push_back(cached_elf);
-                    lastElfEndAddr = cached_elf.end();
-                }
-                continue;
-            }
 #ifdef __LP64__
             if (it.startAddress >= 0x7fffffff0000)
                 continue;
 #else
-            if (it.startAddress >= 0xfffff0000)
+            if (it.startAddress >= 0xffff0000)
                 continue;
 #endif
-            if (!it.readable || it.is_shared || !it.isValid() || it.startAddress < lastElfEndAddr)
+
+            if (!it.isValid() || !it.readable || it.writeable || it.is_shared ||
+                (it.inode != 0 && it.inode == lastElfNode))
                 continue;
 
-            if (((it.pathname.empty() || it.inode == 0) && it.pathname != "[vdso]") || it.pathname == "cfi shadow")
+            if (isAppFilter)
+            {
+                if (it.inode == 0 || (!KittyUtils::String::StartsWith(it.pathname, "/data/") &&
+                                      !KittyUtils::String::StartsWith(it.pathname, "/proc/") &&
+                                      !KittyUtils::String::StartsWith(it.pathname, "/memfd:")))
+                    continue;
+            }
+            else if (isSysFilter)
+            {
+                if ((it.inode == 0 && it.pathname != "[vdso]") ||
+                    (!KittyUtils::String::StartsWith(it.pathname, "/system/") &&
+                     !KittyUtils::String::StartsWith(it.pathname, "/apex/")))
+                    continue;
+            }
+
+            if (cached_elfs.size() && cached_elfs.count(it.startAddress) > 0)
+            {
+                auto elf = cached_elfs[it.startAddress];
+                if (elf.filePath() == it.pathname)
+                {
+                    if (eMachineCheck(type, progMachine, elf.header().e_machine))
+                    {
+                        elfs.push_back(elf);
+                    }
+                    lastElfNode = elf.baseSegment().inode;
+                    continue;
+                }
+                else
+                {
+                    cached_elfs.erase(it.startAddress);
+                }
+            }
+
+            bool isFile = (!it.pathname.empty() && it.inode != 0);
+            if (!isFile && it.pathname != "[vdso]" && !KittyUtils::String::StartsWith(it.pathname, "/memfd:"))
                 continue;
 
-            if (KittyUtils::String::StartsWith(it.pathname, "/dev/") || KittyUtils::String::StartsWith(it.pathname, "/system/etc/"))
+            if (it.pathname == "cfi shadow")
                 continue;
 
-            const std::string fileExtension = KittyUtils::fileExtension(it.pathname);
-            if (!fileExtension.empty() && fileExtension != "so" && fileExtension != "apk" && fileExtension != "zip")
+            if (KittyUtils::String::StartsWith(it.pathname, "/dev/") ||
+                KittyUtils::String::StartsWith(it.pathname, "/system/fonts/") ||
+                KittyUtils::String::StartsWith(it.pathname, "/data/priv-downloads/") ||
+                KittyUtils::String::StartsWith(it.pathname, "/data/misc/"))
+                continue;
+
+            if (KittyUtils::String::StartsWith(it.pathname, "/system/etc/") &&
+                !KittyUtils::String::EndsWith(it.pathname, ".so"))
+                continue;
+
+            if ((KittyUtils::String::StartsWith(it.pathname, "/data/dalvik-cache/") ||
+                 KittyUtils::String::StartsWith(it.pathname, "/system/") ||
+                 KittyUtils::String::StartsWith(it.pathname, "/apex/com.android.") ||
+                 (KittyUtils::String::StartsWith(it.pathname, "/data/app/") &&
+                  KittyUtils::String::Contains(it.pathname, "/oat/"))) &&
+                (KittyUtils::String::EndsWith(it.pathname, ".jar") ||
+                 KittyUtils::String::EndsWith(it.pathname, ".art") ||
+                 KittyUtils::String::EndsWith(it.pathname, ".oat") ||
+                 KittyUtils::String::EndsWith(it.pathname, ".odex") ||
+                 KittyUtils::String::EndsWith(it.pathname, ".dex")))
                 continue;
 
             auto elf = ElfScanner(it.startAddress, maps);
             if (elf.isValid())
             {
-                lastElfEndAddr = elf.end();
-                elfs.push_back(elf);
+                if (eMachineCheck(type, progMachine, elf.header().e_machine))
+                {
+                    elfs.push_back(elf);
+                }
+                lastElfNode = elf.baseSegment().inode;
                 cached_elfs[it.startAddress] = elf;
             }
         }
 
-        return elfs;
-    }
-
-    std::vector<ElfScanner> ElfScanner::GetAppELFs()
-    {
-        std::vector<ElfScanner> elfs;
-
-        const auto allElfs = GetAllELFs();
-        for (const auto &it : allElfs)
+        std::vector<uintptr_t> invalid_keys;
+        for (auto &it : cached_elfs)
         {
-            if (it.isValid() && KittyUtils::String::StartsWith(it.realPath(), "/data/app/"))
+            if (it.first && !KittyMemory::getAddressMap(it.first, maps).readable)
             {
-                elfs.push_back(it);
+                invalid_keys.push_back(it.first);
             }
+        }
+
+        for (auto &it : invalid_keys)
+        {
+            cached_elfs.erase(it);
         }
 
         return elfs;
     }
 
-    std::vector<ElfScanner> ElfScanner::GetEmulatedELFs()
-    {
-        auto proc_e_machine = GetProgramElf().header().e_machine;
-
-        std::vector<ElfScanner> elfs;
-
-        const auto allElfs = ElfScanner::GetAllELFs();
-        for (const auto &it : allElfs)
-        {
-            if (it.isValid() && it.header().e_machine != proc_e_machine)
-            {
-                elfs.push_back(it);
-            }
-        }
-        return elfs;
-    }
-
-    ElfScanner ElfScanner::findElf(const std::string &path)
+    ElfScanner ElfScanner::findElf(const std::string &path, EScanElfType type, EScanElfFilter filter)
     {
         ElfScanner ret{};
 
@@ -962,7 +1122,7 @@ namespace KittyScanner
         std::vector<ElfScanner> elfs;
         std::vector<ElfScanner> dyn_elfs;
 
-        const auto allElfs = ElfScanner::GetAllELFs();
+        const auto allElfs = ElfScanner::getAllELFs(type, filter);
         for (const auto &it : allElfs)
         {
             if (it.isValid() && KittyUtils::String::EndsWith(it.realPath(), path))
@@ -1013,26 +1173,12 @@ namespace KittyScanner
         return ret;
     }
 
-    ElfScanner ElfScanner::GetProgramElf()
-    {
-        const char *path = "/proc/self/exe";
-        char exePath[0xff] = {0};
-        errno = 0;
-        int ret = int(KT_EINTR_RETRY(readlink(path, exePath, 0xff)));
-        if (ret == -1)
-        {
-            int err = errno;
-            KITTY_LOGE("Failed to readlink \"%s\", error(%d): %s.", path, err, strerror(err));
-            return {};
-        }
-        return findElf(exePath);
-    }
-
-    std::vector<std::pair<uintptr_t, ElfScanner>> ElfScanner::findSymbolAll(const std::string &symbolName)
+    std::vector<std::pair<uintptr_t, ElfScanner>> ElfScanner::findSymbolAll(const std::string &symbolName,
+                                                                            EScanElfType type, EScanElfFilter filter)
     {
         std::vector<std::pair<uintptr_t, ElfScanner>> ret{};
 
-        auto elfs = GetAllELFs();
+        auto elfs = getAllELFs(type, filter);
         for (auto &it : elfs)
         {
             uintptr_t sym = it.findSymbol(symbolName);
@@ -1051,7 +1197,8 @@ namespace KittyScanner
         memset(&_soinfo_offsets, 0, sizeof(_soinfo_offsets));
         _init = false;
 
-        if (!isValid()) return;
+        if (!isValid())
+            return;
 
         init();
     }
@@ -1062,15 +1209,19 @@ namespace KittyScanner
         memset(&_soinfo_offsets, 0, sizeof(_soinfo_offsets));
         _init = false;
 
-        if (!isValid()) return;
+        if (!isValid())
+            return;
 
         init();
     }
 
     bool LinkerScanner::init()
     {
-        if (_init) return true;
-        if (!isValid()) return false;
+        if (!isValid())
+            return false;
+
+        if (_init)
+            return true;
 
         for (const auto &sym : dsymbols())
         {
@@ -1101,13 +1252,12 @@ namespace KittyScanner
         KITTY_LOGD("solist(%zx) | somain(%zx) | sonext(%zx)", solist(), somain(), sonext());
 
         auto maps = KittyMemory::getAllMaps();
-        KittyPtrValidator kPtrValidator(getpid(), true);
 
         uintptr_t solist_ptr = solist();
         std::vector<char> solist_buf(KT_SOINFO_BUFFER_SZ, 0);
         for (size_t i = 0; i < solist_buf.size(); i += sizeof(uintptr_t))
         {
-            if (kPtrValidator.isPtrReadable(solist_ptr + i))
+            if (KittyMemory::getAddressMap(solist_ptr + i, maps).readable)
             {
                 memcpy((void *)(solist_buf.data() + i), (const void *)(solist_ptr + i), sizeof(uintptr_t));
             }
@@ -1117,7 +1267,7 @@ namespace KittyScanner
         uintptr_t somain_ptr = (somain() ? somain() : sonext());
         for (size_t i = 0; i < si_buf.size(); i += sizeof(uintptr_t))
         {
-            if (kPtrValidator.isPtrReadable(somain_ptr + i))
+            if (KittyMemory::getAddressMap(somain_ptr + i, maps).readable)
             {
                 memcpy((void *)(si_buf.data() + i), (const void *)(somain_ptr + i), sizeof(uintptr_t));
             }
@@ -1126,8 +1276,15 @@ namespace KittyScanner
         ElfScanner si_elf{};
         for (size_t i = 0; i < si_buf.size(); i += sizeof(uintptr_t))
         {
-            si_elf = ElfScanner(*(uintptr_t *)&si_buf[i], maps);
-            if (si_elf.isValid() && si_elf.dynamics().size())
+            uintptr_t possible_base = *(uintptr_t *)&si_buf[i];
+
+            auto tmp_map = KittyMemory::getAddressMap(possible_base, maps);
+            if (possible_base != tmp_map.startAddress || !tmp_map.isValid() || !tmp_map.readable || tmp_map.writeable ||
+                tmp_map.is_shared)
+                continue;
+
+            si_elf = ElfScanner(possible_base, maps);
+            if (si_elf.isValid())
             {
                 _soinfo_offsets.base = i;
                 break;
@@ -1135,6 +1292,9 @@ namespace KittyScanner
         }
 
         KITTY_LOGD("soinfo_base(%zx)", _soinfo_offsets.base);
+
+        if (_soinfo_offsets.base == 0)
+            return false;
 
         for (size_t i = 0; i < si_buf.size(); i += sizeof(uintptr_t))
         {
@@ -1144,7 +1304,8 @@ namespace KittyScanner
                 _soinfo_offsets.phdr = i;
             if (value == si_elf.programHeaders().size())
                 _soinfo_offsets.phnum = i;
-            else if (value == si_elf.loadSize())
+            else if (value == si_elf.loadSize() ||
+                     value == (si_elf.loadSize() + KittyMemory::getAddressMap(si_elf.end(), maps).length))
                 _soinfo_offsets.size = i;
             else if (value == si_elf.dynamic())
                 _soinfo_offsets.dyn = i;
@@ -1158,31 +1319,39 @@ namespace KittyScanner
                 _soinfo_offsets.strsz = i;
         }
 
-        KITTY_LOGD("soinfo_bias(%zx) | soinfo_size(%zx)", _soinfo_offsets.base, _soinfo_offsets.size);
-        KITTY_LOGD("soinfo_phdr(%zx, %zx) | soinfo_dyn(%zx)", _soinfo_offsets.phdr, _soinfo_offsets.phnum, _soinfo_offsets.dyn);
-        KITTY_LOGD("soinfo_strtab(%zx, %zx) | soinfo_symtab(%zx)", _soinfo_offsets.strtab, _soinfo_offsets.strsz, _soinfo_offsets.symtab);
+        KITTY_LOGD("soinfo_bias(%zx) | soinfo_size(%zx)", _soinfo_offsets.bias, _soinfo_offsets.size);
+        KITTY_LOGD("soinfo_phdr(%zx, %zx) | soinfo_dyn(%zx)", _soinfo_offsets.phdr, _soinfo_offsets.phnum,
+                   _soinfo_offsets.dyn);
+        KITTY_LOGD("soinfo_strtab(%zx, %zx) | soinfo_symtab(%zx)", _soinfo_offsets.strtab, _soinfo_offsets.strsz,
+                   _soinfo_offsets.symtab);
 
-        if (!(_soinfo_offsets.size && _soinfo_offsets.bias &&
-              _soinfo_offsets.dyn && _soinfo_offsets.symtab &&
-              _soinfo_offsets.strtab && _soinfo_offsets.strsz))
+        if (!(_soinfo_offsets.size && _soinfo_offsets.bias && _soinfo_offsets.dyn && _soinfo_offsets.symtab &&
+              _soinfo_offsets.strtab))
         {
             return false;
         }
 
         for (size_t i = 0; i < solist_buf.size(); i += sizeof(uintptr_t))
         {
-            uintptr_t value = *(uintptr_t *)&solist_buf[i];
+            uintptr_t possible_next = *(uintptr_t *)&solist_buf[i];
 
-            if (!kPtrValidator.isPtrReadable(value + _soinfo_offsets.base))
+            if (!KittyMemory::getAddressMap(possible_next + _soinfo_offsets.base, maps).readable)
                 continue;
 
-            auto tmp_elf = ElfScanner(*(uintptr_t *)(value + _soinfo_offsets.base), maps);
+            uintptr_t possible_base = *(uintptr_t *)(possible_next + _soinfo_offsets.base);
+            auto tmp_map = KittyMemory::getAddressMap(possible_base, maps);
+            if (!tmp_map.isValid() || !tmp_map.readable || tmp_map.writeable || tmp_map.is_shared)
+                continue;
+
+            auto tmp_elf = ElfScanner(possible_base, maps);
             if (tmp_elf.isValid())
             {
-                if (!kPtrValidator.isPtrReadable(value + _soinfo_offsets.size))
+                if (!KittyMemory::getAddressMap(possible_next + _soinfo_offsets.size, maps).readable)
                     continue;
 
-                if (tmp_elf.loadSize() == *(uintptr_t *)(value + _soinfo_offsets.size))
+                size_t possible_size = *(uintptr_t *)(possible_next + _soinfo_offsets.size);
+                if (possible_size == tmp_elf.loadSize() ||
+                    possible_size == (tmp_elf.loadSize() + KittyMemory::getAddressMap(tmp_elf.end(), maps).length))
                 {
                     _soinfo_offsets.next = i;
                     break;
@@ -1196,19 +1365,18 @@ namespace KittyScanner
         return _init;
     }
 
-    std::vector<soinfo_info_t> LinkerScanner::GetSoList() const
+    std::vector<kitty_soinfo_t> LinkerScanner::allSoInfo() const
     {
-        std::vector<soinfo_info_t> infos{};
+        std::vector<kitty_soinfo_t> infos{};
 
-        if (!isValid() || !_init) return infos;
+        if (!isValid() || !_init)
+            return infos;
 
         auto maps = KittyMemory::getAllMaps();
         uintptr_t si = solist();
-        while (si && KittyMemory::getAddressMap(maps, si).readable)
+        while (si && KittyMemory::getAddressMap(si, maps).readable)
         {
-            soinfo_info_t info = GetInfoFromSoInfo_(si, maps);
-            if (!info.bias) break;
-
+            kitty_soinfo_t info = infoFromSoInfo_(si, maps);
             infos.push_back(info);
 
             si = *(uintptr_t *)(si + _soinfo_offsets.next);
@@ -1216,30 +1384,61 @@ namespace KittyScanner
         return infos;
     }
 
-    soinfo_info_t LinkerScanner::GetInfoFromSoInfo_(uintptr_t si, const std::vector<KittyMemory::ProcMap> &maps) const
+    kitty_soinfo_t LinkerScanner::findSoInfo(const std::string &name) const
     {
-        soinfo_info_t info{};
+        const auto list = allSoInfo();
+        for (const auto &it : list)
+        {
+            if (KittyUtils::String::EndsWith(it.realpath, name))
+            {
+                return it;
+            }
+        }
+        return {};
+    }
 
-        if (!isValid() || !_init) return info;
+    kitty_soinfo_t LinkerScanner::infoFromSoInfo_(uintptr_t si, const std::vector<KittyMemory::ProcMap> &maps) const
+    {
+        kitty_soinfo_t info{};
 
-        auto si_map = KittyMemory::getAddressMap(maps, *(uintptr_t *)(si + _soinfo_offsets.bias));
+        if (!_init)
+            return info;
+
+        info.ptr = si;
+        info.base = *(uintptr_t *)(si + _soinfo_offsets.base);
+        info.size = *(uintptr_t *)(si + _soinfo_offsets.size);
+        info.phdr = *(uintptr_t *)(si + _soinfo_offsets.phdr);
+        info.phnum = *(uintptr_t *)(si + _soinfo_offsets.phnum);
+        info.dyn = *(uintptr_t *)(si + _soinfo_offsets.dyn);
+        info.strtab = *(uintptr_t *)(si + _soinfo_offsets.strtab);
+        info.symtab = *(uintptr_t *)(si + _soinfo_offsets.symtab);
+        info.strsz = _soinfo_offsets.strsz ? *(uintptr_t *)(si + _soinfo_offsets.strsz) : 0;
+        info.bias = *(uintptr_t *)(si + _soinfo_offsets.bias);
+        info.next = *(uintptr_t *)(si + _soinfo_offsets.next);
+
+        uintptr_t start_map_addr = info.base;
+        if (start_map_addr == 0)
+            start_map_addr = info.base;
+        if (start_map_addr == 0)
+            start_map_addr = info.bias;
+        if (start_map_addr == 0)
+            start_map_addr = info.phdr;
+        if (start_map_addr == 0)
+            start_map_addr = info.dyn;
+        if (start_map_addr == 0)
+            start_map_addr = info.strtab;
+        if (start_map_addr == 0)
+            start_map_addr = info.symtab;
+
+        auto si_map = KittyMemory::getAddressMap(start_map_addr, maps);
         if (si_map.isValid())
         {
-            info.base = *(uintptr_t *)(si + _soinfo_offsets.base);
-            info.size = *(uintptr_t *)(si + _soinfo_offsets.size);
-            info.phdr = *(uintptr_t *)(si + _soinfo_offsets.phdr);
-            info.phnum = *(uintptr_t *)(si + _soinfo_offsets.phnum);
-            info.dyn = *(uintptr_t *)(si + _soinfo_offsets.dyn);
-            info.strtab = *(uintptr_t *)(si + _soinfo_offsets.strtab);
-            info.symtab = *(uintptr_t *)(si + _soinfo_offsets.symtab);
-            info.strsz = *(uintptr_t *)(si + _soinfo_offsets.strsz);
-            info.bias = *(uintptr_t *)(si + _soinfo_offsets.bias);
-            info.next = *(uintptr_t *)(si + _soinfo_offsets.next);
             info.path = si_map.pathname;
             info.realpath = si_map.pathname;
             if (si_map.offset != 0)
             {
-                std::string inZipPath = KittyUtils::Zip::GetFileInfoByDataOffset(si_map.pathname, si_map.offset).fileName;
+                std::string inZipPath =
+                    KittyUtils::Zip::GetFileInfoByDataOffset(si_map.pathname, si_map.offset).fileName;
                 if (!inZipPath.empty())
                 {
                     info.realpath += '!';
@@ -1251,6 +1450,464 @@ namespace KittyScanner
         return info;
     }
 
-#endif  // __ANDROID__
+#endif // __ANDROID__
 
-}  // namespace KittyScanner
+    bool NativeBridgeScanner::init()
+    {
+        if (_init)
+            return true;
+
+        _nb = ElfScanner::findElf("/libnativebridge.so", EScanElfType::Native, EScanElfFilter::System);
+        if (!_nb.isValid())
+        {
+            KITTY_LOGD("NativeBridgeScanner: Failed to find libnativebrdge.so");
+            return false;
+        }
+
+        _nbImpl = ElfScanner::findElf("/libhoudini.so", EScanElfType::Native, EScanElfFilter::System);
+        if (_nbImpl.isValid())
+            _isHoudini = true;
+        else
+            _nbImpl = ElfScanner::findElf("/libndk_translation.so", EScanElfType::Native, EScanElfFilter::System);
+
+        if (!_nbImpl.isValid())
+        {
+            KITTY_LOGD("NativeBridgeScanner: Failed to find nativebridge implementation");
+            return false;
+        }
+
+        _nbItf = _nbImpl.findSymbol("NativeBridgeItf");
+        if (_nbItf == 0)
+        {
+            KITTY_LOGD("NativeBridgeScanner: Failed to find export NativeBridgeItf");
+            return false;
+        }
+
+        _nbItf_data.version = *(int *)_nbItf;
+        switch (_nbItf_data.version)
+        {
+        case 2: // SIGNAL_VERSION
+            _nbItf_data_size = sizeof(uintptr_t) * 8;
+            break;
+        case 3: // NAMESPACE_VERSION
+            _nbItf_data_size = sizeof(uintptr_t) * 15;
+            break;
+        case 4: // VENDOR_NAMESPACE_VERSION
+            _nbItf_data_size = sizeof(uintptr_t) * 16;
+            break;
+        case 5: // RUNTIME_NAMESPACE_VERSION
+            _nbItf_data_size = sizeof(uintptr_t) * 17;
+            break;
+        case 6: // PRE_ZYGOTE_FORK_VERSION
+            _nbItf_data_size = sizeof(uintptr_t) * 18;
+            break;
+        case 7: // CRITICAL_NATIVE_SUPPORT_VERSION
+            _nbItf_data_size = sizeof(uintptr_t) * 19;
+            break;
+        case 8: // IDENTIFY_NATIVELY_BRIDGED_FUNCTION_POINTERS_VERSION
+            _nbItf_data_size = sizeof(uintptr_t) * 21;
+            break;
+        default:
+            KITTY_LOGD("NativeBridgeScanner: Unsupported nativebridge version (%d)", _nbItf_data.version);
+            return false;
+        }
+
+        KITTY_LOGD("NativeBridgeScanner: Using nativebridge version (%d), data size (%p)", _nbItf_data.version,
+                   (void *)_nbItf_data_size);
+
+        memcpy(&_nbItf_data, (const void *)(_nbItf), _nbItf_data_size);
+
+        *(uintptr_t *)&fnNativeBridgeInitialized = _nb.findSymbol("NativeBridgeInitialized");
+        if (fnNativeBridgeInitialized == nullptr)
+            *(uintptr_t *)&fnNativeBridgeInitialized = _nb.findSymbol("_ZN7android23NativeBridgeInitializedEv");
+
+        // replace for nb v2
+        if (_nbItf_data.version < 3)
+        {
+            uintptr_t pLoadLibrary = _nb.findSymbol("NativeBridgeLoadLibrary");
+            if (pLoadLibrary == 0)
+                pLoadLibrary = _nb.findSymbol("_ZN7android23NativeBridgeLoadLibraryEPKci");
+
+            uintptr_t pGetTrampoline = _nb.findSymbol("NativeBridgeGetTrampoline");
+            if (pGetTrampoline == 0)
+                pGetTrampoline = _nb.findSymbol("_ZN7android25NativeBridgeGetTrampolineEPvPKcS2_j");
+
+            if (pLoadLibrary != 0)
+                *(uintptr_t *)&_nbItf_data.loadLibrary = pLoadLibrary;
+
+            if (pGetTrampoline != 0)
+                *(uintptr_t *)&_nbItf_data.getTrampoline = pGetTrampoline;
+        }
+
+        auto emu_dl_elf = ElfScanner::findElf("/libdl.so", EScanElfType::Emulated, EScanElfFilter::System);
+        if (!emu_dl_elf.isValid())
+        {
+            KITTY_LOGD("NativeBridgeScanner: Failed to find emulated libdl.so");
+            return false;
+        }
+
+        struct
+        {
+            uintptr_t base = 0;
+            size_t size = 0;
+        } data = {emu_dl_elf.phdr(), emu_dl_elf.programHeaders().size()};
+
+        KITTY_LOGD("NativeBridgeScanner: sodl phdr { %p, %zu }", (void *)emu_dl_elf.phdr(),
+                   emu_dl_elf.programHeaders().size());
+
+        auto maps = KittyMemory::getAllMaps();
+
+        // search in bss frst
+        for (auto &it : _nbImpl.bssSegments())
+        {
+            _sodl = findDataFirst(it.startAddress, it.endAddress, &data, sizeof(data));
+            if (_sodl)
+            {
+                KITTY_LOGD("NativeBridgeScanner: Found sodl->phdr ref (%p) at %s", (void *)_sodl,
+                           it.toString().c_str());
+                break;
+            }
+        }
+
+        if (_sodl == 0)
+        {
+            // search in read-only "[anon:Mem_" or "[anon:linker_alloc]"
+            for (auto &it : maps)
+            {
+                if (!it.is_private || !it.is_ro || it.inode != 0)
+                    continue;
+
+                if (!KittyUtils::String::StartsWith(it.pathname, "[anon:Mem_") && it.pathname != "[anon:linker_alloc]")
+                    continue;
+
+                _sodl = findDataFirst(it.startAddress, it.endAddress, &data, sizeof(data));
+                if (_sodl)
+                {
+                    KITTY_LOGD("NativeBridgeScanner: Found sodl->phdr ref (%p) at %s", (void *)_sodl,
+                               it.toString().c_str());
+                    break;
+                }
+            }
+        }
+
+        if (_sodl == 0)
+        {
+            KITTY_LOGD("NativeBridgeScanner: Failed to find refs to emulated libdl.so phdr data");
+            return false;
+        }
+
+        std::vector<char> si_buf(KT_SOINFO_BUFFER_SZ, 0);
+        for (size_t i = 0; i < si_buf.size(); i += sizeof(uintptr_t))
+        {
+            if (KittyMemory::getAddressMap(_sodl + i, maps).readable)
+            {
+                memcpy((void *)(si_buf.data() + i), (const void *)(_sodl + i), sizeof(uintptr_t));
+            }
+        }
+
+        for (size_t i = 0; i < si_buf.size(); i += sizeof(uintptr_t))
+        {
+            uintptr_t possible_next = *(uintptr_t *)&si_buf[i];
+            if (!KittyMemory::getAddressMap(possible_next, maps).readable)
+                continue;
+
+            std::vector<char> si_buf_inner(KT_SOINFO_BUFFER_SZ, 0);
+            for (size_t j = 0; j < si_buf_inner.size(); j += sizeof(uintptr_t))
+            {
+                if (KittyMemory::getAddressMap(possible_next + j, maps).readable)
+                {
+                    memcpy((void *)(si_buf_inner.data() + j), (const void *)(possible_next + j), sizeof(uintptr_t));
+                }
+            }
+
+            ElfScanner si_elf{};
+            for (size_t j = 0; j < si_buf_inner.size(); j += sizeof(uintptr_t))
+            {
+                uintptr_t possible_base = *(uintptr_t *)&si_buf_inner[j];
+
+                auto tmp_map = KittyMemory::getAddressMap(possible_base, maps);
+                if (possible_base != tmp_map.startAddress || !tmp_map.isValid() || !tmp_map.readable ||
+                    tmp_map.writeable || tmp_map.is_shared)
+                    continue;
+
+                si_elf = ElfScanner(possible_base, maps);
+                if (si_elf.isValid())
+                {
+                    _soinfo_offsets.base = j;
+                    break;
+                }
+            }
+
+            if (_soinfo_offsets.base == 0)
+                continue;
+
+            for (size_t j = 0; j < si_buf_inner.size(); j += sizeof(uintptr_t))
+            {
+                uintptr_t value = *(uintptr_t *)&si_buf_inner[j];
+                if (value == si_elf.phdr())
+                    _soinfo_offsets.phdr = j;
+                if (value == si_elf.programHeaders().size())
+                    _soinfo_offsets.phnum = j;
+                else if (value == si_elf.loadSize() ||
+                         value == (si_elf.loadSize() + KittyMemory::getAddressMap(si_elf.end(), maps).length))
+                    _soinfo_offsets.size = j;
+                else if (value == si_elf.dynamic())
+                    _soinfo_offsets.dyn = j;
+                else if (value == si_elf.stringTable())
+                    _soinfo_offsets.strtab = j;
+                else if (value == si_elf.symbolTable())
+                    _soinfo_offsets.symtab = j;
+                else if (j > _soinfo_offsets.size && value == si_elf.loadBias())
+                    _soinfo_offsets.bias = j;
+                else if (value == si_elf.stringTableSize())
+                    _soinfo_offsets.strsz = j;
+            }
+
+            if (_soinfo_offsets.size && _soinfo_offsets.bias && _soinfo_offsets.dyn && _soinfo_offsets.symtab &&
+                _soinfo_offsets.strtab)
+            {
+                // phdr offset might not be 0
+                _sodl -= _soinfo_offsets.phdr;
+                _soinfo_offsets.next = _soinfo_offsets.phdr + i;
+                break;
+            }
+        }
+
+        KITTY_LOGD("nb_soinfo_base(%zx) | nb_soinfo_size(%zx) | nb_soinfo_bias(%zx)", _soinfo_offsets.base,
+                   _soinfo_offsets.size, _soinfo_offsets.bias);
+        KITTY_LOGD("nb_soinfo_phdr(%zx, %zx) | nb_soinfo_dyn(%zx)", _soinfo_offsets.phdr, _soinfo_offsets.phnum,
+                   _soinfo_offsets.dyn);
+        KITTY_LOGD("nb_soinfo_strtab(%zx, %zx) | nb_soinfo_symtab(%zx)", _soinfo_offsets.strtab, _soinfo_offsets.strsz,
+                   _soinfo_offsets.symtab);
+
+        KITTY_LOGD("nb_soinfo_next(%zx)", _soinfo_offsets.next);
+
+        _init = _soinfo_offsets.next != 0;
+        return _init;
+    }
+
+    std::vector<kitty_soinfo_t> NativeBridgeScanner::allSoInfo() const
+    {
+        std::vector<kitty_soinfo_t> infos{};
+
+        if (!_init)
+            return infos;
+
+        auto maps = KittyMemory::getAllMaps();
+        uintptr_t si = _sodl;
+        while (si && KittyMemory::getAddressMap(si, maps).readable)
+        {
+            kitty_soinfo_t info = infoFromSoInfo_(si, maps);
+            infos.push_back(info);
+
+            si = *(uintptr_t *)(si + _soinfo_offsets.next);
+        }
+        return infos;
+    }
+
+    kitty_soinfo_t NativeBridgeScanner::findSoInfo(const std::string &name) const
+    {
+        kitty_soinfo_t ret{};
+        const auto list = allSoInfo();
+        for (const auto &it : list)
+        {
+            if (KittyUtils::String::EndsWith(it.realpath, name))
+            {
+                ret = it;
+                break;
+            }
+        }
+        return ret;
+    }
+
+    kitty_soinfo_t NativeBridgeScanner::infoFromSoInfo_(uintptr_t si,
+                                                        const std::vector<KittyMemory::ProcMap> &maps) const
+    {
+        kitty_soinfo_t info{};
+
+        if (!_init)
+            return info;
+
+        info.ptr = si;
+        info.base = *(uintptr_t *)(si + _soinfo_offsets.base);
+        info.size = *(uintptr_t *)(si + _soinfo_offsets.size);
+        info.phdr = *(uintptr_t *)(si + _soinfo_offsets.phdr);
+        info.phnum = *(uintptr_t *)(si + _soinfo_offsets.phnum);
+        info.dyn = *(uintptr_t *)(si + _soinfo_offsets.dyn);
+        info.strtab = *(uintptr_t *)(si + _soinfo_offsets.strtab);
+        info.symtab = *(uintptr_t *)(si + _soinfo_offsets.symtab);
+        info.strsz = _soinfo_offsets.strsz ? *(uintptr_t *)(si + _soinfo_offsets.strsz) : 0;
+        info.bias = *(uintptr_t *)(si + _soinfo_offsets.bias);
+        info.next = *(uintptr_t *)(si + _soinfo_offsets.next);
+
+        uintptr_t start_map_addr = info.base;
+        if (start_map_addr == 0)
+            start_map_addr = info.base;
+        if (start_map_addr == 0)
+            start_map_addr = info.bias;
+        if (start_map_addr == 0)
+            start_map_addr = info.phdr;
+        if (start_map_addr == 0)
+            start_map_addr = info.dyn;
+        if (start_map_addr == 0)
+            start_map_addr = info.strtab;
+        if (start_map_addr == 0)
+            start_map_addr = info.symtab;
+
+        auto si_map = KittyMemory::getAddressMap(start_map_addr, maps);
+        if (si_map.isValid())
+        {
+            info.path = si_map.pathname;
+            info.realpath = si_map.pathname;
+            if (si_map.offset != 0)
+            {
+                std::string inZipPath =
+                    KittyUtils::Zip::GetFileInfoByDataOffset(si_map.pathname, si_map.offset).fileName;
+                if (!inZipPath.empty())
+                {
+                    info.realpath += '!';
+                    info.realpath += inZipPath;
+                }
+            }
+        }
+
+        return info;
+    }
+
+    void *NativeBridgeLinker::dlopen(const std::string &path, int flags)
+    {
+#if !defined(__x86_64__) && !defined(__i386__)
+        return nullptr;
+#endif
+        auto &nb = NativeBridgeScanner::Get();
+        auto nbData = nb.nbItfData();
+
+        if (path.empty() || !nb.init())
+            return nullptr;
+
+        if (nbData.version < 2 || nbData.version > 8)
+        {
+            KITTY_LOGD("nb_loadLibrary: nativebridge version (%d) is not supooted", nbData.version);
+            return nullptr;
+        }
+
+        if (nb.fnNativeBridgeInitialized && !nb.fnNativeBridgeInitialized())
+        {
+            KITTY_LOGD("nb_loadLibrary: nativebridge is not initialized");
+            return nullptr;
+        }
+
+        /*if ((nbData..version == 2 && !nbData.isSupported(path.c_str())) ||
+            !nbData.isPathSupported(path.c_str()))
+        {
+            KITTY_LOGD("nb_loadLibrary: path not suoported (%s)", path.c_str());
+            return nullptr;
+        }*/
+
+        if (nbData.version == 2)
+            return nbData.loadLibrary(path.c_str(), flags);
+
+        void *default_ns = nullptr;
+        if (nb.isHoudini())
+        {
+            default_ns = (void *)uintptr_t(nbData.version >= 5 ? 5 : 3);
+            if (nbData.version >= 5)
+            {
+                uintptr_t tmp_ns = (uintptr_t)nbData.getExportedNamespace("classloader-namespace");
+                if (tmp_ns > 0 && tmp_ns <= 25)
+                    default_ns = (void *)tmp_ns;
+            }
+        }
+        else
+        {
+            if (nbData.getExportedNamespace)
+                default_ns = nbData.getExportedNamespace("default");
+            else if (nbData.getVendorNamespace)
+                default_ns = nbData.getVendorNamespace();
+        }
+
+        if (!default_ns)
+        {
+            KITTY_LOGD("nb_loadLibrary: Failed to find default namespace");
+            return nullptr;
+        }
+
+        return nbData.loadLibraryExt(path.c_str(), flags, default_ns);
+    }
+
+    void *NativeBridgeLinker::dlsym(void *handle, const std::string &sym_name)
+    {
+#if !defined(__x86_64__) && !defined(__i386__)
+        return nullptr;
+#endif
+        auto &nb = NativeBridgeScanner::Get();
+        auto nbData = nb.nbItfData();
+
+        if (!handle || !nb.init())
+            return nullptr;
+
+        if (nbData.version < 2 || nbData.version > 8)
+        {
+            KITTY_LOGD("nb_loadLibrary: nativebridge version (%d) is not supooted", nbData.version);
+            return nullptr;
+        }
+
+        if (nb.fnNativeBridgeInitialized && !nb.fnNativeBridgeInitialized())
+        {
+            KITTY_LOGD("nb_loadLibrary: nativebridge is not initialized");
+            return nullptr;
+        }
+
+        if (nbData.version < 7)
+        {
+            return nbData.getTrampoline(handle, sym_name.c_str(), nullptr, 0);
+        }
+
+        return nbData.getTrampolineWithJNICallType(handle, sym_name.c_str(), nullptr, 0, KT_JNICallTypeRegular);
+    }
+
+    const char *NativeBridgeLinker::dlerror()
+    {
+#if !defined(__x86_64__) && !defined(__i386__)
+        return nullptr;
+#endif
+        auto &nb = NativeBridgeScanner::Get();
+        auto nbData = nb.nbItfData();
+
+        if (nb.fnNativeBridgeInitialized && !nb.fnNativeBridgeInitialized())
+        {
+            KITTY_LOGD("nb_loadLibrary: nativebridge is not initialized");
+            return nullptr;
+        }
+
+        return nbData.version >= 3 && nbData.getError ? nbData.getError() : nullptr;
+    }
+
+    bool NativeBridgeLinker::dladdr(const void *addr, kitty_soinfo_t *info)
+    {
+        for (const auto &it : NativeBridgeScanner::Get().allSoInfo())
+        {
+            if (uintptr_t(addr) >= it.base && uintptr_t(addr) < (it.base + it.size))
+            {
+                if (info)
+                    *info = it;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void NativeBridgeLinker::dl_iterate_phdr(const std::function<bool(const kitty_soinfo_t *)> &callback)
+    {
+        if (!callback)
+            return;
+
+        for (const auto &it : NativeBridgeScanner::Get().allSoInfo())
+        {
+            if (callback(&it))
+                break;
+        }
+    }
+
+} // namespace KittyScanner

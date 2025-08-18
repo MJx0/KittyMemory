@@ -38,9 +38,9 @@
 #ifdef kITTYMEMORY_DEBUG
 #define KITTY_LOGD(fmt, ...) ((void)__android_log_print(ANDROID_LOG_DEBUG, KITTY_LOG_TAG, fmt, ##__VA_ARGS__))
 #else
-#define KITTY_LOGD(fmt, ...) \
-    do                       \
-    {                        \
+#define KITTY_LOGD(fmt, ...)                                                                                           \
+    do                                                                                                                 \
+    {                                                                                                                  \
     } while (0)
 #endif
 
@@ -53,9 +53,9 @@
 #ifdef kITTYMEMORY_DEBUG
 #define KITTY_LOGD(fmt, ...) os_log(OS_LOG_DEFAULT, "D " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
 #else
-#define KITTY_LOGD(fmt, ...) \
-    do                       \
-    {                        \
+#define KITTY_LOGD(fmt, ...)                                                                                           \
+    do                                                                                                                 \
+    {                                                                                                                  \
     } while (0)
 #endif
 
@@ -64,12 +64,15 @@
 
 #endif
 
-#define KT_EINTR_RETRY(exp) ({         \
-    __typeof__(exp) _rc;                   \
-    do {                                   \
-        _rc = (exp);                       \
-    } while (_rc == -1 && errno == EINTR); \
-    _rc; })
+#define KT_EINTR_RETRY(exp)                                                                                            \
+    ({                                                                                                                 \
+        __typeof__(exp) _rc;                                                                                           \
+        do                                                                                                             \
+        {                                                                                                              \
+            _rc = (exp);                                                                                               \
+        } while (_rc == -1 && errno == EINTR);                                                                         \
+        _rc;                                                                                                           \
+    })
 
 #ifdef __ANDROID__
 
@@ -90,7 +93,7 @@
 #define KT_ELF_ST_INFO(bind, type) (((bind) << 4) + ((type) & 0xf))
 #define KT_ELF_ST_VISIBILITY(o) ((o) & 0x03)
 
-#endif  // __ANDROID__
+#endif // __ANDROID__
 
 namespace KittyUtils
 {
@@ -129,7 +132,7 @@ namespace KittyUtils
         std::string Fmt(const char *fmt, ...);
 
         std::string Random(size_t length);
-    }  // namespace String
+    } // namespace String
 
     template <typename T>
     T randInt(T min, T max)
@@ -221,13 +224,9 @@ namespace KittyUtils
              *
              * @return ElfSym pointer
              */
-            const KT_ElfW(Sym) * LookupByName(uintptr_t elfhash,
-                                              uintptr_t symtab,
-                                              uintptr_t strtab,
-                                              size_t syment,
-                                              size_t strsz,
-                                              const char *symbol_name);
-        }  // namespace ElfHash
+            const KT_ElfW(Sym) * LookupByName(uintptr_t elfhash, uintptr_t symtab, uintptr_t strtab, size_t syment,
+                                              size_t strsz, const char *symbol_name);
+        } // namespace ElfHash
 
         namespace GnuHash
         {
@@ -242,20 +241,16 @@ namespace KittyUtils
              *
              * @return ElfSym pointer
              */
-            const KT_ElfW(Sym) * LookupByName(uintptr_t gnuhash,
-                                              uintptr_t symtab,
-                                              uintptr_t strtab,
-                                              size_t syment,
-                                              size_t strsz,
-                                              const char *symbol_name);
-        }  // namespace GnuHash
-    }  // namespace Elf
+            const KT_ElfW(Sym) * LookupByName(uintptr_t gnuhash, uintptr_t symtab, uintptr_t strtab, size_t syment,
+                                              size_t strsz, const char *symbol_name);
+        } // namespace GnuHash
+    } // namespace Elf
 
     namespace IO
     {
         size_t WriteDataToFD(int fd, const void *buffer, size_t len);
         size_t WriteDataToFile(const std::string &path, const void *buffer, size_t len, bool append);
-    }  // namespace IO
+    } // namespace IO
 
     namespace Zip
     {
@@ -265,7 +260,7 @@ namespace KittyUtils
 #define KT_CENTRAL_DIR_SIGNATURE 0x02014b50
 #define KT_LOCAL_HEADER_SIGNATURE 0x04034b50
 #define KT_ZIP64_EXTRA_ID 0x0001
-#define KT_MAX_NAME_LEN 65535  // ZIP max file name length
+#define KT_MAX_NAME_LEN 65535 // ZIP max file name length
 
         struct ZipFileInfo
         {
@@ -291,7 +286,7 @@ namespace KittyUtils
 
         ZipFileInfo GetFileInfoByDataOffset(const std::string &zipPath, uint64_t dataOffset);
         ZipFileMMap MMapFileByDataOffset(const std::string &zipPath, uint64_t dataOffset);
-    }  // namespace Zip
+    } // namespace Zip
 
-#endif  // __ANDROID__
-}  // namespace KittyUtils
+#endif // __ANDROID__
+} // namespace KittyUtils

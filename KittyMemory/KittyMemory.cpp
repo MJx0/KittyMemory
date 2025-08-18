@@ -12,11 +12,14 @@ bool findMSHookMemory(void *dst, const void *src, size_t len);
 #endif
 extern "C"
 {
-    kern_return_t mach_vm_protect(vm_map_t target_task, mach_vm_address_t address, mach_vm_size_t size, boolean_t set_maximum, vm_prot_t new_protection);
+    kern_return_t mach_vm_protect(vm_map_t target_task, mach_vm_address_t address, mach_vm_size_t size,
+                                  boolean_t set_maximum, vm_prot_t new_protection);
 
-    kern_return_t mach_vm_write(vm_map_t target_task, mach_vm_address_t address, vm_offset_t data, mach_msg_type_number_t dataCnt);
+    kern_return_t mach_vm_write(vm_map_t target_task, mach_vm_address_t address, vm_offset_t data,
+                                mach_msg_type_number_t dataCnt);
 
-    kern_return_t mach_vm_read_overwrite(vm_map_read_t target_task, mach_vm_address_t address, mach_vm_size_t size, mach_vm_address_t data, mach_vm_size_t *outsize);
+    kern_return_t mach_vm_read_overwrite(vm_map_read_t target_task, mach_vm_address_t address, mach_vm_size_t size,
+                                         mach_vm_address_t data, mach_vm_size_t *outsize);
 }
 #endif
 
@@ -30,7 +33,7 @@ namespace KittyMemory
         uintptr_t pageStart = KT_PAGE_START(address);
         size_t pageLen = KT_PAGE_LEN2(address, length);
         int ret = mprotect(reinterpret_cast<void *>(pageStart), pageLen, protection);
-        KITTY_LOGD("mprotect(%p, %zu, %d) = %d", (void*)pageStart, pageLen, protection, ret);
+        KITTY_LOGD("mprotect(%p, %zu, %d) = %d", (void *)pageStart, pageLen, protection, ret);
         return ret;
     }
 
@@ -71,8 +74,8 @@ namespace KittyMemory
 
         if (setAddressProtection(address, len, addressMap.protection | PROT_READ) != 0)
         {
-            KITTY_LOGE("memRead err couldn't add write perm to address (%p, len: %zu, prot: %d)",
-                       address, len, addressMap.protection);
+            KITTY_LOGE("memRead err couldn't add write perm to address (%p, len: %zu, prot: %d)", address, len,
+                       addressMap.protection);
             return false;
         }
 
@@ -80,8 +83,8 @@ namespace KittyMemory
 
         if (setAddressProtection(address, len, addressMap.protection) != 0)
         {
-            KITTY_LOGE("memRead err couldn't revert protection of address (%p, len: %zu, prot: %d)",
-                       address, len, addressMap.protection);
+            KITTY_LOGE("memRead err couldn't revert protection of address (%p, len: %zu, prot: %d)", address, len,
+                       addressMap.protection);
             return false;
         }
 
@@ -125,8 +128,8 @@ namespace KittyMemory
 
         if (setAddressProtection(address, len, KT_PROT_RWX) != 0)
         {
-            KITTY_LOGE("memWrite err couldn't add write perm to address (%p, len: %zu, prot: %d)",
-                       address, len, KT_PROT_RWX);
+            KITTY_LOGE("memWrite err couldn't add write perm to address (%p, len: %zu, prot: %d)", address, len,
+                       KT_PROT_RWX);
             return false;
         }
 
@@ -134,8 +137,8 @@ namespace KittyMemory
 
         if (setAddressProtection(address, len, KT_PROT_RX) != 0)
         {
-            KITTY_LOGE("memWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)",
-                       address, len, KT_PROT_RX);
+            KITTY_LOGE("memWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)", address, len,
+                       KT_PROT_RX);
             return false;
         }
 
@@ -177,9 +180,8 @@ namespace KittyMemory
             char perms[5] = {0}, dev[11] = {0}, pathname[256] = {0};
             // parse a line in maps file
             // (format) startAddress-endAddress perms offset dev inode pathname
-            sscanf(line, "%llx-%llx %s %llx %s %lu %s",
-                   &map.startAddress, &map.endAddress,
-                   perms, &map.offset, dev, &map.inode, pathname);
+            sscanf(line, "%llx-%llx %s %llx %s %lu %s", &map.startAddress, &map.endAddress, perms, &map.offset, dev,
+                   &map.inode, pathname);
 
             map.length = map.endAddress - map.startAddress;
             map.dev = dev;
@@ -217,63 +219,54 @@ namespace KittyMemory
         {
             KITTY_LOGE("getAllMaps err couldn't find any map");
         }
+        else
+        {
+            std::sort(retMaps.begin(), retMaps.end(), [](const KittyMemory::ProcMap &a, const KittyMemory::ProcMap &b) {
+                return a.startAddress < b.startAddress;
+            });
+        }
+
         return retMaps;
     }
 
-    std::vector<ProcMap> getMapsEqual(const std::vector<ProcMap> &maps, const std::string &name)
+    std::vector<ProcMap> getMaps(EProcMapFilter filter, const std::string &name, const std::vector<ProcMap> &maps)
     {
-        if (name.empty()) return {};
-
         std::vector<ProcMap> retMaps;
 
         for (auto &it : maps)
         {
-            if (it.isValid() && !it.isUnknown() && it.pathname == name)
+            if (it.isValid())
             {
-                retMaps.push_back(it);
+                switch (filter)
+                {
+                case EProcMapFilter::Equal:
+                    if (it.pathname == name)
+                        retMaps.push_back(it);
+                    break;
+                case EProcMapFilter::StartWith:
+                    if (KittyUtils::String::StartsWith(it.pathname, name))
+                        retMaps.push_back(it);
+                    break;
+                case EProcMapFilter::EndWith:
+                    if (KittyUtils::String::EndsWith(it.pathname, name))
+                        retMaps.push_back(it);
+                    break;
+                case EProcMapFilter::Contains:
+                default:
+                    if (KittyUtils::String::Contains(it.pathname, name))
+                        retMaps.push_back(it);
+                    break;
+                }
             }
         }
 
         return retMaps;
     }
 
-    std::vector<ProcMap> getMapsContain(const std::vector<ProcMap> &maps, const std::string &name)
+    ProcMap getAddressMap(const void *address, const std::vector<ProcMap> &maps)
     {
-        if (name.empty()) return {};
-
-        std::vector<ProcMap> retMaps;
-
-        for (auto &it : maps)
-        {
-            if (it.isValid() && !it.isUnknown() && strstr(it.pathname.c_str(), name.c_str()))
-            {
-                retMaps.push_back(it);
-            }
-        }
-
-        return retMaps;
-    }
-
-    std::vector<ProcMap> getMapsEndWith(const std::vector<ProcMap> &maps, const std::string &name)
-    {
-        if (name.empty()) return {};
-
-        std::vector<ProcMap> retMaps;
-
-        for (auto &it : maps)
-        {
-            if (it.isValid() && !it.isUnknown() && KittyUtils::String::EndsWith(it.pathname, name))
-            {
-                retMaps.push_back(it);
-            }
-        }
-
-        return retMaps;
-    }
-
-    ProcMap getAddressMap(const std::vector<ProcMap> &maps, const void *address)
-    {
-        if (!address) return {};
+        if (!address)
+            return {};
 
         ProcMap retMap{};
 
@@ -296,21 +289,25 @@ namespace KittyMemory
 
         auto allMaps = getAllMaps();
 
-        if (!getAddressMap(allMaps, address).isValid())
+        if (!getAddressMap(address, allMaps).isValid())
             return false;
 
         uintptr_t endAddress = address + size;
 
         int fd = KT_EINTR_RETRY(open(destination.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666));
-        if (fd <= 0) return false;
+        if (fd <= 0)
+            return false;
 
         size_t bytesWritten = 0;
         for (const auto &it : allMaps)
         {
-            if (it.startAddress < address) continue;
-            if (it.startAddress >= endAddress) break;
+            if (it.startAddress < address)
+                continue;
+            if (it.startAddress >= endAddress)
+                break;
 
-            if (!it.readable && KittyMemory::setAddressProtection((void *)(it.startAddress), it.endAddress, it.protection | PROT_READ) != 0)
+            if (!it.readable && KittyMemory::setAddressProtection((void *)(it.startAddress), it.endAddress,
+                                                                  it.protection | PROT_READ) != 0)
             {
                 std::vector<char> zeroData(it.length, 0);
                 KittyUtils::IO::WriteDataToFD(fd, zeroData.data(), zeroData.size());
@@ -339,7 +336,7 @@ namespace KittyMemory
         if (!memFile.empty() || destination.empty())
             return false;
 
-        auto fileMaps = KittyMemory::getMapsEndWith(memFile);
+        auto fileMaps = KittyMemory::getMaps(EProcMapFilter::EndWith, memFile);
         if (fileMaps.empty())
             return false;
 
@@ -361,6 +358,114 @@ namespace KittyMemory
         return dumpMemToDisk(firstMap.startAddress, lastEnd - firstMap.startAddress, destination);
     }
 
+
+#if defined(__aarch64__)
+#define syscall_rpmv_n 270
+#define syscall_wpmv_n 271
+#elif defined(__arm__)
+#define syscall_rpmv_n 376
+#define syscall_wpmv_n 377
+#elif defined(__i386__)
+#define syscall_rpmv_n 347
+#define syscall_wpmv_n 348
+#elif defined(__x86_64__)
+#define syscall_rpmv_n 310
+#define syscall_wpmv_n 311
+#else
+#error "Unsupported ABI"
+#endif
+
+    static ssize_t syscall_process_vm_readv(pid_t pid, const iovec *lvec, unsigned long liovcnt, const iovec *rvec,
+                                            unsigned long riovcnt, unsigned long flags)
+    {
+        return syscall(syscall_rpmv_n, pid, lvec, liovcnt, rvec, riovcnt, flags);
+    }
+
+    static ssize_t syscall_process_vm_writev(pid_t pid, const iovec *lvec, unsigned long liovcnt, const iovec *rvec,
+                                             unsigned long riovcnt, unsigned long flags)
+    {
+        return syscall(syscall_wpmv_n, pid, lvec, liovcnt, rvec, riovcnt, flags);
+    }
+
+    size_t syscallMemOP(EPROCESS_VM_OP op, uintptr_t address, void *buffer, size_t len)
+    {
+        if (!address || !buffer || !len)
+            return 0;
+
+        pid_t pid = getpid();
+
+        struct iovec lvec{.iov_base = buffer, .iov_len = 0};
+        struct iovec rvec{.iov_base = reinterpret_cast<void *>(address), .iov_len = 0};
+
+        ssize_t n = 0;
+        size_t bytes_op = 0, remaining = len;
+        bool op_one_page = false;
+        do
+        {
+            size_t remaining_or_pglen = remaining;
+            if (op_one_page)
+                remaining_or_pglen = std::min(KT_PAGE_LEN(rvec.iov_base), remaining);
+
+            lvec.iov_len = remaining_or_pglen;
+            rvec.iov_len = remaining_or_pglen;
+
+            errno = 0;
+
+            if (op == EPROCESS_VM_OP::READV)
+                n = KT_EINTR_RETRY(syscall_process_vm_readv(pid, &lvec, 1, &rvec, 1, 0));
+            else
+                n = KT_EINTR_RETRY(syscall_process_vm_writev(pid, &lvec, 1, &rvec, 1, 0));
+
+            if (n > 0)
+            {
+                remaining -= n;
+                bytes_op += n;
+                lvec.iov_base = reinterpret_cast<char *>(lvec.iov_base) + n;
+                rvec.iov_base = reinterpret_cast<char *>(rvec.iov_base) + n;
+            }
+            else
+            {
+                if (n == -1)
+                {
+                    int err = errno;
+                    switch (err)
+                    {
+                    case EPERM:
+                        KITTY_LOGD("Failed syscallMemOP(%p + %p, %p) | Can't access the "
+                                   "address space of process ID (%d).",
+                                   (void *)address, (void *)(uintptr_t(rvec.iov_base) - address), (void *)rvec.iov_len,
+                                   pid);
+                        break;
+                    case ESRCH:
+                        KITTY_LOGD("Failed syscallMemOP(%p + %p, %p) | No process with ID "
+                                   "(%d) exists.",
+                                   (void *)address, (void *)(uintptr_t(rvec.iov_base) - address), (void *)rvec.iov_len,
+                                   pid);
+                        break;
+                    case ENOMEM:
+                        KITTY_LOGD("Failed syscallMemOP(%p + %p, %p) | Could not allocate "
+                                   "memory for internal copies of "
+                                   "the iovec structures.",
+                                   (void *)address, (void *)(uintptr_t(rvec.iov_base) - address), (void *)rvec.iov_len);
+                        break;
+                    default:
+                        KITTY_LOGD("Failed syscallMemOP(%p + %p, %p) | error(%d): %s.", (void *)address,
+                                   (void *)(uintptr_t(rvec.iov_base) - address), (void *)rvec.iov_len, err,
+                                   strerror(err));
+                    }
+                }
+                if (op_one_page)
+                {
+                    remaining -= remaining_or_pglen;
+                    lvec.iov_base = reinterpret_cast<char *>(lvec.iov_base) + remaining_or_pglen;
+                    rvec.iov_base = reinterpret_cast<char *>(rvec.iov_base) + remaining_or_pglen;
+                }
+            }
+            op_one_page = n == -1 || size_t(n) != remaining_or_pglen;
+        } while (remaining > 0);
+        return bytes_op;
+    }
+
 #elif __APPLE__
 
     kern_return_t getPageInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out)
@@ -368,8 +473,7 @@ namespace KittyMemory
         vm_size_t region_len = 0;
         mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
         unsigned int depth = 0x1000;
-        return vm_region_recurse_64(mach_task_self(), &region, &region_len,
-                                    &depth, (vm_region_recurse_info_t)info_out,
+        return vm_region_recurse_64(mach_task_self(), &region, &region_len, &depth, (vm_region_recurse_info_t)info_out,
                                     &info_count);
     }
 
@@ -396,11 +500,11 @@ namespace KittyMemory
         }
 
         mach_vm_size_t nread = 0;
-        kern_return_t kret = mach_vm_read_overwrite(mach_task_self(), mach_vm_address_t(address), mach_vm_size_t(len), mach_vm_address_t(buffer), &nread);
+        kern_return_t kret = mach_vm_read_overwrite(mach_task_self(), mach_vm_address_t(address), mach_vm_size_t(len),
+                                                    mach_vm_address_t(buffer), &nread);
         if (kret != KERN_SUCCESS || nread != len)
         {
-            KITTY_LOGE("memRead err vm_read failed - [ nread(%p) - kerror(%d) ]",
-                       (void *)nread, kret);
+            KITTY_LOGE("memRead err vm_read failed - [ nread(%p) - kerror(%d) ]", (void *)nread, kret);
             return false;
         }
 
@@ -442,18 +546,19 @@ namespace KittyMemory
         kern_return_t kret = getPageInfo(page_start, &page_info);
         if (kret != KERN_SUCCESS)
         {
-            KITTY_LOGE("memWrite err failed to get page info of address (%p) - kerror(%d).",
-                       address, kret);
+            KITTY_LOGE("memWrite err failed to get page info of address (%p) - kerror(%d).", address, kret);
             return KMS_ERR_GET_PAGEINFO;
         }
 
         // already has write perm
         if (page_info.protection & VM_PROT_WRITE)
         {
-            kret = mach_vm_write(self_task, mach_vm_address_t(address), vm_offset_t(buffer), mach_msg_type_number_t(len));
+            kret = mach_vm_write(self_task, mach_vm_address_t(address), vm_offset_t(buffer),
+                                 mach_msg_type_number_t(len));
             if (kret != KERN_SUCCESS)
             {
-                KITTY_LOGE("memWrite err vm_write failed to write data to address (%p) - kerror(%d).",
+                KITTY_LOGE("memWrite err vm_write failed to write data to address (%p) - "
+                           "kerror(%d).",
                            address, kret);
                 return KMS_ERR_VMWRITE;
             }
@@ -467,11 +572,11 @@ namespace KittyMemory
 #endif
 
         // copy-on-write, see vm_map_protect in vm_map.c
-        kret = mach_vm_protect(self_task, page_start, page_len, false,
-                               VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+        kret = mach_vm_protect(self_task, page_start, page_len, false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
         if (kret != KERN_SUCCESS)
         {
-            KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) COW failed - kerror(%d).",
+            KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) COW failed - "
+                       "kerror(%d).",
                        (void *)page_start, page_len, page_info.protection, kret);
             return KMS_ERR_PROT;
         }
@@ -479,15 +584,15 @@ namespace KittyMemory
         kret = mach_vm_write(self_task, mach_vm_address_t(address), vm_offset_t(buffer), mach_msg_type_number_t(len));
         if (kret != KERN_SUCCESS)
         {
-            KITTY_LOGE("memWrite err vm_write failed to write data to address (%p) - kerror(%d).",
-                       address, kret);
+            KITTY_LOGE("memWrite err vm_write failed to write data to address (%p) - kerror(%d).", address, kret);
             return KMS_ERR_VMWRITE;
         }
 
         kret = mach_vm_protect(self_task, page_start, page_len, false, page_info.protection);
         if (kret != KERN_SUCCESS)
         {
-            KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) restore failed - kerror(%d).",
+            KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) restore failed "
+                       "- kerror(%d).",
                        (void *)page_start, page_len, page_info.protection, kret);
             return KMS_ERR_PROT;
         }
@@ -514,7 +619,8 @@ namespace KittyMemory
         for (uint32_t i = 0; i < imageCount; i++)
         {
             const mach_header *hdr = _dyld_get_image_header(i);
-            if (!hdr || hdr->filetype != MH_EXECUTE) continue;
+            if (!hdr || hdr->filetype != MH_EXECUTE)
+                continue;
 
             // first executable
             if (exeIdx == -1)
@@ -557,7 +663,8 @@ namespace KittyMemory
         for (uint32_t i = 0; i < imageCount; i++)
         {
             const char *name = _dyld_get_image_name(i);
-            if (!name) continue;
+            if (!name)
+                continue;
 
             std::string fullpath(name);
             if (!KittyUtils::String::EndsWith(fullpath, fileName))
@@ -593,9 +700,9 @@ namespace KittyMemory
         return info.address + address;
     }
 
-#endif  // __APPLE__
+#endif // __APPLE__
 
-}  // namespace KittyMemory
+} // namespace KittyMemory
 
 #ifdef __APPLE__
 
@@ -678,7 +785,8 @@ namespace KittyScanner
 
             std::string curr_sym_str = std::string(strtab + symtab[i].n_un.n_strx);
 
-            // KITTY_LOGI("syms[%d] = [%{public}s, %p]", i, curr_sym_str.c_str(), (void*)symtab[i].n_value);
+            // KITTY_LOGI("syms[%d] = [%{public}s, %p]", i, curr_sym_str.c_str(),
+            // (void*)symtab[i].n_value);
 
             if (curr_sym_str.empty() || curr_sym_str != symbol)
                 continue;
@@ -693,6 +801,6 @@ namespace KittyScanner
     {
         return findSymbol(KittyMemory::getMemoryFileInfo(lib), symbol);
     }
-}  // namespace KittyScanner
+} // namespace KittyScanner
 
-#endif  // __APPLE__
+#endif // __APPLE__
