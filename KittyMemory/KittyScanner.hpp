@@ -137,6 +137,7 @@ namespace KittyScanner
         size_t strsz = 0;
         uintptr_t bias = 0;
         uintptr_t next = 0;
+        uint16_t e_machine = 0;
         std::string path;
         std::string realpath;
     };
@@ -169,7 +170,7 @@ namespace KittyScanner
         size_t _strsz, _syment;
         std::string _filepath;
         std::string _realpath;
-        bool _headerless;
+        bool _fixedBySoInfo;
         bool _dsymbols_init;
         std::unordered_map<std::string, uintptr_t> _dsymbolsMap;
         std::vector<KittyMemory::ProcMap> _segments;
@@ -179,7 +180,7 @@ namespace KittyScanner
     public:
         ElfScanner()
             : _elfBase(0), _phdr(0), _loads(0), _loadBias(0), _loadSize(0), _dynamic(0), _stringTable(0),
-              _symbolTable(0), _elfHashTable(0), _gnuHashTable(0), _strsz(0), _syment(0), _headerless(false),
+              _symbolTable(0), _elfHashTable(0), _gnuHashTable(0), _strsz(0), _syment(0), _fixedBySoInfo(false),
               _dsymbols_init(false)
         {
         }
@@ -198,9 +199,9 @@ namespace KittyScanner
             return _elfBase && _loadSize && _phdr && _loadBias;
         }
 
-        inline bool isHeaderless() const
+        inline bool isFixedBySoInfo() const
         {
-            return _headerless;
+            return _fixedBySoInfo;
         }
 
         inline uintptr_t base() const
@@ -337,10 +338,7 @@ namespace KittyScanner
         RegisterNativeFn findRegisterNativeFn(const std::string &name) const;
 
         // dump ELF to disk
-        inline bool dumpToDisk(const std::string &destination)
-        {
-            return (isValid() && KittyMemory::dumpMemToDisk(_elfBase, _loadSize, destination));
-        }
+        bool dumpToDisk(const std::string &destination) const;
 
         static ElfScanner &getProgramElf();
 
@@ -536,7 +534,7 @@ namespace KittyScanner
     class NativeBridgeScanner
     {
     private:
-        ElfScanner _nb, _nbImpl;
+        ElfScanner _nbElf, _nbImplElf, _sodlElf;
         uintptr_t _sodl;
         struct
         {
