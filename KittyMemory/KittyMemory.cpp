@@ -294,8 +294,8 @@ namespace KittyMemory
 
         uintptr_t endAddress = address + size;
 
-        int fd = KT_EINTR_RETRY(open(destination.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666));
-        if (fd <= 0)
+        KittyIOFile dest(destination, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
+        if (!dest.Open())
             return false;
 
         size_t bytesWritten = 0;
@@ -310,16 +310,16 @@ namespace KittyMemory
                                                                   it.protection | PROT_READ) != 0)
             {
                 std::vector<char> zeroData(it.length, 0);
-                KittyUtils::IO::WriteDataToFD(fd, zeroData.data(), zeroData.size());
+                dest.Write(zeroData.data(), zeroData.size());
             }
             else
             {
-                size_t n = KittyUtils::IO::WriteDataToFD(fd, (const void *)address, size);
+                size_t n = dest.Write((const void *)address, size);
                 bytesWritten += n;
                 if (n < it.length)
                 {
                     std::vector<char> zeroData(it.length - bytesWritten, 0);
-                    KittyUtils::IO::WriteDataToFD(fd, zeroData.data(), zeroData.size());
+                    dest.Write(zeroData.data(), zeroData.size());
                 }
 
                 if (!it.readable)
@@ -327,7 +327,7 @@ namespace KittyMemory
             }
         }
 
-        close(fd);
+        dest.Close();
         return bytesWritten == size;
     }
 

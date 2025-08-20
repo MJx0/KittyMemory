@@ -26,6 +26,7 @@
 #endif
 
 #include "KittyUtils.hpp"
+#include "KittyIOFile.hpp"
 
 namespace KittyMemory
 {

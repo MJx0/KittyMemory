@@ -6,6 +6,7 @@
 #include "KittyScanner.hpp"
 #include "KittyAsm.hpp"
 #include "KittyPtrValidator.hpp"
+#include "KittyIOFile.hpp"
 
 #ifdef __ANDROID__
 using KittyMemory::ProcMap;

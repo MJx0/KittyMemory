@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <dirent.h>
 
 #define KT_PAGE_SIZE (sysconf(_SC_PAGE_SIZE))
 
@@ -245,12 +246,6 @@ namespace KittyUtils
                                               size_t strsz, const char *symbol_name);
         } // namespace GnuHash
     } // namespace Elf
-
-    namespace IO
-    {
-        size_t WriteDataToFD(int fd, const void *buffer, size_t len);
-        size_t WriteDataToFile(const std::string &path, const void *buffer, size_t len, bool append);
-    } // namespace IO
 
     namespace Zip
     {

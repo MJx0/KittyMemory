@@ -318,48 +318,6 @@ namespace KittyUtils
         }  // namespace GnuHash
     }  // namespace Elf
 
-    namespace IO
-    {
-        size_t WriteDataToFD(int fd, const void *buffer, size_t len)
-        {
-            if (fd <= 0) return 0;
-
-            const char *buf = (const char *)buffer;
-            size_t bytesWritten = 0;
-            do
-            {
-                errno = 0;
-                size_t bytesToWrite = std::min<size_t>(1024*1024, len - bytesWritten);
-                ssize_t writeSize = KT_EINTR_RETRY(write(fd, buf + bytesWritten, bytesToWrite));
-                if (writeSize <= 0)
-                    break;
-
-                bytesWritten += writeSize;
-            } while (bytesWritten < len);
-
-            return bytesWritten;
-        }
-
-        size_t WriteDataToFile(const std::string &path, const void *buffer, size_t len, bool append)
-        {
-            if (path.empty()) return 0;
-
-            int flags = O_WRONLY | O_CREAT | O_CLOEXEC;
-            if (append)
-                flags |= O_APPEND;
-            else
-                flags |= O_TRUNC;
-
-            int fd = KT_EINTR_RETRY(open(path.c_str(), flags, 0666));
-            if (fd <= 0) return 0;
-
-            size_t bytesWritten = WriteDataToFD(fd, buffer, len);
-
-            close(fd);
-            return bytesWritten;
-        }
-    }
-
     namespace Zip
     {
         bool GetCentralDirInfo(int fd, uint64_t fileSize, bool &isZip64, uint64_t &cdOffset, uint64_t &totalEntries)
