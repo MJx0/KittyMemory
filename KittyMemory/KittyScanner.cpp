@@ -1807,22 +1807,22 @@ namespace KittyScanner
         if (path.empty() || !nb.init())
             return nullptr;
 
-        if (nbData.version < 2 || nbData.version > 8)
+        if (nbData.version < 2)
         {
-            KITTY_LOGD("nb_loadLibrary: nativebridge version (%d) is not supooted", nbData.version);
+            KITTY_LOGD("nb_dlopen: nativebridge version (%d) is not supported", nbData.version);
             return nullptr;
         }
 
         if (nb.fnNativeBridgeInitialized && !nb.fnNativeBridgeInitialized())
         {
-            KITTY_LOGD("nb_loadLibrary: nativebridge is not initialized");
+            KITTY_LOGD("nb_dlopen: nativebridge is not initialized");
             return nullptr;
         }
 
         /*if ((nbData..version == 2 && !nbData.isSupported(path.c_str())) ||
             !nbData.isPathSupported(path.c_str()))
         {
-            KITTY_LOGD("nb_loadLibrary: path not suoported (%s)", path.c_str());
+            KITTY_LOGD("nb_dlopen: path not supported (%s)", path.c_str());
             return nullptr;
         }*/
 
@@ -1850,7 +1850,7 @@ namespace KittyScanner
 
         if (!default_ns)
         {
-            KITTY_LOGD("nb_loadLibrary: Failed to find default namespace");
+            KITTY_LOGD("nb_dlopen: Failed to find default namespace");
             return nullptr;
         }
 
@@ -1868,15 +1868,15 @@ namespace KittyScanner
         if (!handle || !nb.init())
             return nullptr;
 
-        if (nbData.version < 2 || nbData.version > 8)
+        if (nbData.version < 28)
         {
-            KITTY_LOGD("nb_loadLibrary: nativebridge version (%d) is not supooted", nbData.version);
+            KITTY_LOGD("nb_dlsym: nativebridge version (%d) is not supported", nbData.version);
             return nullptr;
         }
 
         if (nb.fnNativeBridgeInitialized && !nb.fnNativeBridgeInitialized())
         {
-            KITTY_LOGD("nb_loadLibrary: nativebridge is not initialized");
+            KITTY_LOGD("nb_dlsym: nativebridge is not initialized");
             return nullptr;
         }
 
@@ -1896,13 +1896,19 @@ namespace KittyScanner
         auto &nb = NativeBridgeScanner::Get();
         auto nbData = nb.nbItfData();
 
-        if (nb.fnNativeBridgeInitialized && !nb.fnNativeBridgeInitialized())
+        if (nbData.version < 3)
         {
-            KITTY_LOGD("nb_loadLibrary: nativebridge is not initialized");
+            KITTY_LOGD("nb_dlerror: nativebridge version (%d) is not supported", nbData.version);
             return nullptr;
         }
 
-        return nbData.version >= 3 && nbData.getError ? nbData.getError() : nullptr;
+        if (nb.fnNativeBridgeInitialized && !nb.fnNativeBridgeInitialized())
+        {
+            KITTY_LOGD("nb_dlerror: nativebridge is not initialized");
+            return nullptr;
+        }
+
+        return nbData.getError ? nbData.getError() : nullptr;
     }
 
     bool NativeBridgeLinker::dladdr(const void *addr, kitty_soinfo_t *info)
