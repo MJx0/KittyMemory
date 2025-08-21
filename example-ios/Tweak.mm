@@ -34,11 +34,22 @@ void test_thread()
         // or framework
         g_BaseInfo = KittyMemory::getMemoryFileInfo("UnityFramework");
     } while (!g_BaseInfo.address);
+
     KITTY_LOGI("UnityFramework base: %p", (void *)g_BaseInfo.address);
+
+    KITTY_LOGI("=============== FIND SYMBOL ================");
     
-    uintptr_t unityBase = g_BaseInfo.address;
+    // you may have to prefix function name with underscore
+    
+    // with existing MemoryFileInfo object
+    KITTY_LOGI("il2cpp_string_new: %p", (void *)(KittyScanner::findSymbol(g_BaseInfo, "_il2cpp_string_new")));
+    // or
+    KITTY_LOGI("il2cpp_string_new: %p", (void *)(KittyScanner::findSymbol("UnityFramework", "_il2cpp_string_new")));
+
     
     KITTY_LOGI("==================== MEMORY PATCH ===================");
+    
+    uintptr_t unityBase = g_BaseInfo.address;
     
 #ifndef kNO_KEYSTONE
     // with asm (uses keystone assembler) insert ';' to seperate statements
@@ -88,17 +99,7 @@ void test_thread()
     // or as 32 bit integer ( 4 bytes )
     if (writeData32(unityBase + 0x1019C1F20, 0x200080D2) && writeData32(unityBase + 0x1019C1F20 + 4, 0xC0035FD6))
         KITTY_LOGI("get_canShoot has been modified successfully");
-    
-    
-    KITTY_LOGI("=============== FIND SYMBOL ================");
-    
-    // you may have to prefix function name with underscore
-    
-    // with existing MemoryFileInfo object
-    KITTY_LOGI("il2cpp_string_new: %p", (void *)(KittyScanner::findSymbol(g_BaseInfo, "_il2cpp_string_new")));
-    // or
-    KITTY_LOGI("il2cpp_string_new: %p", (void *)(KittyScanner::findSymbol("UnityFramework", "_il2cpp_string_new")));
-    
+
     
     KITTY_LOGI("=============== PATTERN SCAN ===============");
     
