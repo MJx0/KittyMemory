@@ -77,7 +77,11 @@ ssize_t KittyIOFile::Read(uintptr_t offset, void *buffer, size_t len)
     do
     {
         errno = 0, _error = 0;
+#ifdef __APPLE__
+        ssize_t readSize = KT_EINTR_RETRY(pread(_fd, buf + bytesRead, len - bytesRead, offset + bytesRead));
+#else
         ssize_t readSize = KT_EINTR_RETRY(pread64(_fd, buf + bytesRead, len - bytesRead, offset + bytesRead));
+#endif
         if (readSize <= 0)
         {
             if (readSize < 0)
@@ -97,7 +101,11 @@ ssize_t KittyIOFile::Write(uintptr_t offset, const void *buffer, size_t len)
     do
     {
         errno = 0, _error = 0;
+#ifdef __APPLE__
+        ssize_t writeSize = KT_EINTR_RETRY(pwrite(_fd, buf + bytesWritten, len - bytesWritten, offset + bytesWritten));
+#else
         ssize_t writeSize = KT_EINTR_RETRY(pwrite64(_fd, buf + bytesWritten, len - bytesWritten, offset + bytesWritten));
+#endif
         if (writeSize <= 0)
         {
             if (writeSize < 0)
@@ -110,6 +118,16 @@ ssize_t KittyIOFile::Write(uintptr_t offset, const void *buffer, size_t len)
     return bytesWritten;
 }
 
+#ifdef __APPLE__
+struct stat KittyIOFile::Stat()
+{
+    errno = 0, _error = 0;
+    struct stat s;
+    if (stat(_filePath.c_str(), &s) == -1)
+        _error = errno;
+    return s;
+}
+#else
 struct stat64 KittyIOFile::Stat()
 {
     errno = 0, _error = 0;
@@ -118,6 +136,7 @@ struct stat64 KittyIOFile::Stat()
         _error = errno;
     return s;
 }
+#endif
 
 bool KittyIOFile::readToString(std::string *str)
 {

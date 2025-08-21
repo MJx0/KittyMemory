@@ -61,7 +61,11 @@ public:
 
     inline bool Delete() { return unlink(_filePath.c_str()) != -1; }
 
+#ifdef __APPLE__
+    struct stat Stat();
+#else
     struct stat64 Stat();
+#endif
 
     bool readToString(std::string *str);
     bool readToBuffer(std::vector<char> *buf);
