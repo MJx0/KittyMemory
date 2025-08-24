@@ -5,11 +5,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-#ifdef __ANDROID__
-#include <dlfcn.h>
-#include <unordered_map>
-#endif
-
 #include "KittyUtils.hpp"
 
 // refs

@@ -11,10 +11,10 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <vector>
-#include <unordered_map>
 
 #ifdef __ANDROID__
 #include <dlfcn.h>
+#include <unordered_map>
 
 #elif __APPLE__
 #include <mach/mach.h>

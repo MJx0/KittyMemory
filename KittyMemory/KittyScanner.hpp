@@ -5,6 +5,11 @@
 #include <vector>
 #include <utility>
 
+#ifdef __ANDROID__
+#include <dlfcn.h>
+#include <unordered_map>
+#endif
+
 #include "KittyMemory.hpp"
 
 namespace KittyScanner
