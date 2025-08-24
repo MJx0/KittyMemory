@@ -143,26 +143,26 @@ namespace KittyMemory
         WRITEV
     };
 
-    size_t syscallMemOP(EPROCESS_VM_OP op, uintptr_t address, void *buffer, size_t len);
+    size_t syscallMemOp(EPROCESS_VM_OP op, uintptr_t address, void *buffer, size_t len);
 
     inline size_t syscallMemRead(uintptr_t address, void *buffer, size_t len)
     {
-        return syscallMemOP(EPROCESS_VM_OP::READV, address, buffer, len);
+        return syscallMemOp(EPROCESS_VM_OP::READV, address, buffer, len);
     }
 
     inline size_t syscallMemRead(void *address, void *buffer, size_t len)
     {
-        return syscallMemOP(EPROCESS_VM_OP::READV, uintptr_t(address), buffer, len);
+        return syscallMemOp(EPROCESS_VM_OP::READV, uintptr_t(address), buffer, len);
     }
 
     inline size_t syscallMemWrite(uintptr_t address, void *buffer, size_t len)
     {
-        return syscallMemOP(EPROCESS_VM_OP::READV, address, buffer, len);
+        return syscallMemOp(EPROCESS_VM_OP::WRITEV, address, buffer, len);
     }
 
     inline size_t syscallMemWrite(void *address, void *buffer, size_t len)
     {
-        return syscallMemOP(EPROCESS_VM_OP::READV, uintptr_t(address), buffer, len);
+        return syscallMemOp(EPROCESS_VM_OP::WRITEV, uintptr_t(address), buffer, len);
     }
 
 #elif __APPLE__

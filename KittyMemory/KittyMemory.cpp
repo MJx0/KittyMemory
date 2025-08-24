@@ -387,7 +387,7 @@ namespace KittyMemory
         return syscall(syscall_wpmv_n, pid, lvec, liovcnt, rvec, riovcnt, flags);
     }
 
-    size_t syscallMemOP(EPROCESS_VM_OP op, uintptr_t address, void *buffer, size_t len)
+    size_t syscallMemOp(EPROCESS_VM_OP op, uintptr_t address, void *buffer, size_t len)
     {
         if (!address || !buffer || !len)
             return 0;
