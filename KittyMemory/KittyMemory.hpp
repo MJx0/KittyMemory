@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <vector>
+#include <unordered_map>
 
 #ifdef __ANDROID__
 #include <dlfcn.h>
