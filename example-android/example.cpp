@@ -116,14 +116,20 @@ void test_thread()
     auto unityELF = ElfScanner::findElf("libunity.so");
 
     // finding register native functions
-    RegisterNativeFn nativeInjectEvent = unityELF.findRegisterNativeFn("nativeInjectEvent");
+    RegisterNativeFn nativeInjectEvent = unityELF.findRegisterNativeFn("nativeInjectEvent",
+                                                                       "(Landroid/view/InputEvent;)Z");
+    // new nativeInjectEvent has second integer param
+    if (!nativeInjectEvent.isValid())
+        nativeInjectEvent = unityELF.findRegisterNativeFn("nativeInjectEvent", "(Landroid/view/InputEvent;I)Z");
+
     if (nativeInjectEvent.isValid())
         KITTY_LOGI("nativeInjectEvent = { %s, %s, %p }", nativeInjectEvent.name, nativeInjectEvent.signature,
                    nativeInjectEvent.fnPtr);
     else
         KITTY_LOGI("nativeInjectEvent = NULL");
 
-    RegisterNativeFn nativeUnitySendMessage = unityELF.findRegisterNativeFn("nativeUnitySendMessage");
+    RegisterNativeFn nativeUnitySendMessage = unityELF.findRegisterNativeFn(
+        "nativeUnitySendMessage", "(Ljava/lang/String;Ljava/lang/String;[B)V");
     if (nativeUnitySendMessage.isValid())
         KITTY_LOGI("nativeUnitySendMessage = { %s, %s, %p }", nativeUnitySendMessage.name,
                    nativeUnitySendMessage.signature, nativeUnitySendMessage.fnPtr);

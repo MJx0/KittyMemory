@@ -911,25 +911,27 @@ namespace KittyScanner
         return it != syms.end() ? it->second : 0;
     }
 
-    RegisterNativeFn ElfScanner::findRegisterNativeFn(const std::string &name) const
+    RegisterNativeFn ElfScanner::findRegisterNativeFn(const std::string &name, const std::string &signature) const
     {
-        uintptr_t string_loc = 0, string_xref = 0, fn_loc = 0;
+        uintptr_t fn_loc = 0;
         RegisterNativeFn fn;
 
         if (name.empty() || !isValid())
             return fn;
 
+        std::vector<uintptr_t> string_locs;
         for (auto &it : segments())
         {
-            if (it.is_ro || it.is_rx)
+            if (it.readable && it.inode != 0)
             {
-                string_loc = KittyScanner::findDataFirst(it.startAddress, it.endAddress, name.data(), name.length());
-                if (string_loc)
-                    break;
+                uintptr_t string_loc = KittyScanner::findDataFirst(it.startAddress, it.endAddress, name.data(),
+                                                                   name.length());
+                if (string_loc != 0)
+                    string_locs.push_back(string_loc);
             }
         }
 
-        if (!string_loc)
+        if (string_locs.empty())
         {
             KITTY_LOGD("findRegisterNativeFn: Couldn't find string (%s) "
                        "in selected maps",
@@ -937,30 +939,38 @@ namespace KittyScanner
             return fn;
         }
 
-        KITTY_LOGD("findRegisterNativeFn: String (%s) at %p", name.c_str(), (void *)string_loc);
-
         for (auto &it : segments())
         {
-            if (it.is_rw)
+            if (it.readable && it.inode != 0)
             {
-                string_xref = KittyScanner::findDataFirst(it.startAddress, it.endAddress, &string_loc,
-                                                          sizeof(uintptr_t));
-                if (!string_xref)
-                    continue;
+                for (auto &string_loc : string_locs)
+                {
+                    uintptr_t string_xref = KittyScanner::findDataFirst(it.startAddress, it.endAddress, &string_loc,
+                                                                        sizeof(uintptr_t));
+                    if (!string_xref)
+                        continue;
 
-                KITTY_LOGD("findRegisterNativeFn: String at (%p) "
-                           "referenced at %p",
-                           (void *)string_loc, (void *)string_xref);
+                    uintptr_t signature_ptr = *(uintptr_t *)(string_xref + sizeof(uintptr_t));
+                    if (signature_ptr == 0)
+                        continue;
 
-                fn_loc = string_xref;
-                break;
+                    std::vector<char> buf(signature.length() + 1, 0);
+                    KittyMemory::syscallMemRead(signature_ptr, buf.data(), buf.size());
+
+                    if (std::string(buf.data()) == signature)
+                    {
+                        fn_loc = string_xref;
+                        break;
+                    }
+                }
             }
         }
 
-        if (!fn_loc)
-            return fn;
+        if (fn_loc != 0)
+        {
+            memcpy(&fn, (void *)fn_loc, sizeof(RegisterNativeFn));
+        }
 
-        memcpy(&fn, (void *)fn_loc, sizeof(RegisterNativeFn));
         return fn;
     }
 

@@ -335,7 +335,7 @@ namespace KittyScanner
         /**
          * search for string "name" references to find the JNINativeMethod array
          */
-        RegisterNativeFn findRegisterNativeFn(const std::string &name) const;
+        RegisterNativeFn findRegisterNativeFn(const std::string &name, const std::string &signature) const;
 
         // dump ELF to disk
         bool dumpToDisk(const std::string &destination) const;
