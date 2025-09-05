@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <inttypes.h>
 #include <cstdio>
 #include <string>
 #include <unistd.h>
@@ -41,12 +42,12 @@ namespace KittyMemory
     class ProcMap
     {
     public:
-        unsigned long long startAddress;
-        unsigned long long endAddress;
+        uintptr_t startAddress;
+        uintptr_t endAddress;
         size_t length;
         int protection;
         bool readable, writeable, executable, is_private, is_shared, is_ro, is_rw, is_rx;
-        unsigned long long offset;
+        uintptr_t offset;
         std::string dev;
         unsigned long inode;
         std::string pathname;
@@ -76,7 +77,7 @@ namespace KittyMemory
         }
         inline std::string toString() const
         {
-            return KittyUtils::String::Fmt("%llx-%llx %c%c%c%c %llx %s %lu %s", startAddress, endAddress,
+            return KittyUtils::String::Fmt("%" PRIxPTR "-%" PRIxPTR " %c%c%c%c %" PRIxPTR " %s %lu %s", startAddress, endAddress,
                                            readable ? 'r' : '-', writeable ? 'w' : '-', executable ? 'x' : '-',
                                            is_private ? 'p' : 's', offset, dev.c_str(), inode, pathname.c_str());
         }
