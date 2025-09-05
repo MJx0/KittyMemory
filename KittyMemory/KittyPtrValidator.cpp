@@ -142,7 +142,7 @@ bool KittyPtrValidator::_parseMapsLine(const std::string &line, RegionInfo *regi
 
     uintptr_t start, end;
     char perms[5] = {0};
-    int parsed = sscanf(line.c_str(), "%zx-%zx %4s", &start, &end, perms);
+    int parsed = sscanf(line.c_str(), "%" SCNxPTR "-%" SCNxPTR " %4s", &start, &end, perms);
     if (parsed != 3)
         return false;
 

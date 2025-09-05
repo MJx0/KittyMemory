@@ -1,5 +1,6 @@
 #pragma once
 
+#include <inttypes.h>
 #include <algorithm>
 #include <cstdint>
 #include <fcntl.h>
