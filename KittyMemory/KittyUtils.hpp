@@ -273,6 +273,9 @@ namespace KittyUtils
         {
             void *data = nullptr;
             size_t size = 0;
+			
+	    ZipFileMMap() = default;
+	    ZipFileMMap(void *data, size_t size) : data(data), size(size) {}
         };
 
         bool GetCentralDirInfo(int fd, uint64_t fileSize, bool &isZip64, uint64_t &cdOffset, uint64_t &totalEntries);

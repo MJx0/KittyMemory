@@ -149,7 +149,7 @@ bool KittyIOFile::readToString(std::string *str)
     if (flen > 0)
     {
         str->resize(flen, 0);
-        return Read(0, str->data(), flen) == flen;
+        return Read(0, (void*)(str->data()), flen) == flen;
     }
 
     // incase stat fails to get file size
