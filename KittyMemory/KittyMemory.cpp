@@ -28,7 +28,7 @@ namespace KittyMemory
 
 #ifdef __ANDROID__
 
-    int setAddressProtection(const void *address, size_t length, int protection)
+    int memProtect(const void *address, size_t length, int protection)
     {
         uintptr_t pageStart = KT_PAGE_START(address);
         size_t pageLen = KT_PAGE_LEN2(address, length);
@@ -72,7 +72,7 @@ namespace KittyMemory
             return true;
         }
 
-        if (setAddressProtection(address, len, addressMap.protection | PROT_READ) != 0)
+        if (memProtect(address, len, addressMap.protection | PROT_READ) != 0)
         {
             KITTY_LOGE("memRead err couldn't add write perm to address (%p, len: %zu, prot: %d)", address, len,
                        addressMap.protection);
@@ -81,7 +81,7 @@ namespace KittyMemory
 
         memcpy(buffer, address, len);
 
-        if (setAddressProtection(address, len, addressMap.protection) != 0)
+        if (memProtect(address, len, addressMap.protection) != 0)
         {
             KITTY_LOGE("memRead err couldn't revert protection of address (%p, len: %zu, prot: %d)", address, len,
                        addressMap.protection);
@@ -126,7 +126,7 @@ namespace KittyMemory
             return true;
         }
 
-        if (setAddressProtection(address, len, KT_PROT_RWX) != 0)
+        if (memProtect(address, len, KT_PROT_RWX) != 0)
         {
             KITTY_LOGE("memWrite err couldn't add write perm to address (%p, len: %zu, prot: %d)", address, len,
                        KT_PROT_RWX);
@@ -135,7 +135,7 @@ namespace KittyMemory
 
         memcpy(address, buffer, len);
 
-        if (setAddressProtection(address, len, KT_PROT_RX) != 0)
+        if (memProtect(address, len, KT_PROT_RX) != 0)
         {
             KITTY_LOGE("memWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)", address, len,
                        KT_PROT_RX);
@@ -306,8 +306,8 @@ namespace KittyMemory
             if (it.startAddress >= endAddress)
                 break;
 
-            if (!it.readable && KittyMemory::setAddressProtection((void *)(it.startAddress), it.endAddress,
-                                                                  it.protection | PROT_READ) != 0)
+            if (!it.readable && KittyMemory::memProtect((void *) (it.startAddress), it.endAddress,
+                                                        it.protection | PROT_READ) != 0)
             {
                 std::vector<char> zeroData(it.length, 0);
                 bytesWritten += dest.Write(zeroData.data(), zeroData.size());
@@ -323,7 +323,10 @@ namespace KittyMemory
                 }
 
                 if (!it.readable)
-                    KittyMemory::setAddressProtection((void *)(it.startAddress), it.endAddress, it.protection);
+                {
+                    KittyMemory::memProtect((const void *) (it.startAddress), it.endAddress,
+                                            it.protection);
+                }
             }
         }
 

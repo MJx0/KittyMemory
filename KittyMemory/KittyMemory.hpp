@@ -94,7 +94,7 @@ namespace KittyMemory
     /*
      * mprotect wrapper
      */
-    int setAddressProtection(const void *address, size_t length, int protection);
+    int memProtect(const void *address, size_t length, int protection);
 
     /*
      * Writes buffer content to an address
