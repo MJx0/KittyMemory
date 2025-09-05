@@ -499,6 +499,7 @@ namespace KittyScanner
                        "syment=%p",
                        (void *)_elfBase, (void *)_loadBias, (void *)_phdr, (void *)_dynamic, (void *)_stringTable,
                        (void *)_symbolTable, (void *)_strsz, (void *)_syment);
+            *this = ElfScanner();
             return;
         }
 
@@ -519,6 +520,7 @@ namespace KittyScanner
         if (!elfBaseMap.isValid() || !elfBaseMap.readable || _elfBase != elfBaseMap.startAddress)
         {
             KITTY_LOGD("ElfScanner: Invalid base(%p) for soinfo(%p)", (void *)_elfBase, (void *)soinfo.ptr);
+            *this = ElfScanner();
             return;
         }
 
@@ -568,6 +570,7 @@ namespace KittyScanner
             (_loadSize && phdrMap.endAddress > (_elfBase + _loadSize)))
         {
             KITTY_LOGD("ElfScanner: Invalid phdr(%p) for soinfo(%p).", (void *)_phdr, (void *)soinfo.ptr);
+            *this = ElfScanner();
             return;
         }
 
@@ -576,16 +579,18 @@ namespace KittyScanner
             auto dynMap = KittyMemory::getAddressMap(_dynamic, maps);
             if (!(dynMap.readable && dynMap.startAddress >= _elfBase && dynMap.endAddress <= (_elfBase + _loadSize)))
             {
-                KITTY_LOGD("ElfScanner: Invalid dyn(%p) for soinfo(%p).", (void *)_phdr, (void *)soinfo.ptr);
+                KITTY_LOGD("ElfScanner: Invalid dyn(%p) for soinfo(%p).", (void *)_dynamic, (void *)soinfo.ptr);
+                *this = ElfScanner();
                 return;
             }
+        }
 
-            auto biasMap = KittyMemory::getAddressMap(_loadBias, maps);
-            if (!(biasMap.readable && biasMap.startAddress >= _elfBase && biasMap.endAddress <= (_elfBase + _loadSize)))
-            {
-                KITTY_LOGD("ElfScanner: Invalid bias(%p) for soinfo(%p).", (void *)_phdr, (void *)soinfo.ptr);
-                return;
-            }
+        // fix for ldplayer
+        auto biasMap = KittyMemory::getAddressMap(_loadBias, maps);
+        if (!(biasMap.readable && biasMap.startAddress >= _elfBase && biasMap.endAddress <= (_elfBase + _loadSize)))
+        {
+            KITTY_LOGD("ElfScanner: Invalid bias(%p) for soinfo(%p).", (void *)_loadBias, (void *)soinfo.ptr);
+            _loadBias = 0;
         }
 
         uintptr_t min_vaddr = UINTPTR_MAX, max_vaddr = 0;
@@ -618,12 +623,14 @@ namespace KittyScanner
         if (!_loads)
         {
             KITTY_LOGD("ElfScanner: No loads entry for ELF (%p).", (void *)_elfBase);
+            *this = ElfScanner();
             return;
         }
 
         if (!max_vaddr)
         {
             KITTY_LOGD("ElfScanner: Failed to find max_vaddr for ELF (%p).", (void *)_elfBase);
+            *this = ElfScanner();
             return;
         }
 
