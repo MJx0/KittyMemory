@@ -1,5 +1,9 @@
 #include "KittyUtils.hpp"
 
+#ifdef __ANDROID__
+#include <sys/system_properties.h>
+#endif
+
 namespace KittyUtils
 {
 
