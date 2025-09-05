@@ -310,16 +310,16 @@ namespace KittyMemory
                                                                   it.protection | PROT_READ) != 0)
             {
                 std::vector<char> zeroData(it.length, 0);
-                dest.Write(zeroData.data(), zeroData.size());
+                bytesWritten += dest.Write(zeroData.data(), zeroData.size());
             }
             else
             {
-                size_t n = dest.Write((const void *)address, size);
+                size_t n = dest.Write((const void *)(it.startAddress), size);
                 bytesWritten += n;
                 if (n < it.length)
                 {
-                    std::vector<char> zeroData(it.length - bytesWritten, 0);
-                    dest.Write(zeroData.data(), zeroData.size());
+                    std::vector<char> zeroData(it.length - n, 0);
+                    bytesWritten += dest.Write(zeroData.data(), zeroData.size());
                 }
 
                 if (!it.readable)
