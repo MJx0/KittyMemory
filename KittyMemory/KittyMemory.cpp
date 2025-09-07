@@ -306,7 +306,7 @@ namespace KittyMemory
             if (it.startAddress >= endAddress)
                 break;
 
-            if (!it.readable && KittyMemory::memProtect((void *) (it.startAddress), it.endAddress,
+            if (!it.readable && KittyMemory::memProtect((void *) (it.startAddress), it.length,
                                                         it.protection | PROT_READ) != 0)
             {
                 std::vector<char> zeroData(it.length, 0);
@@ -314,7 +314,7 @@ namespace KittyMemory
             }
             else
             {
-                size_t n = dest.Write((const void *)(it.startAddress), size);
+                size_t n = dest.Write((const void *)(it.startAddress), it.length);
                 bytesWritten += n;
                 if (n < it.length)
                 {
@@ -324,8 +324,7 @@ namespace KittyMemory
 
                 if (!it.readable)
                 {
-                    KittyMemory::memProtect((const void *) (it.startAddress), it.endAddress,
-                                            it.protection);
+                    KittyMemory::memProtect((const void *) (it.startAddress), it.length, it.protection);
                 }
             }
         }
