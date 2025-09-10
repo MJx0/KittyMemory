@@ -1010,6 +1010,9 @@ namespace KittyScanner
             const auto maps = KittyMemory::getMaps(KittyMemory::EProcMapFilter::Equal, exePath, allMaps);
             for (const auto &it : maps)
             {
+                if (!it.readable || it.writeable)
+                    continue;
+
                 progElf = ElfScanner(it.startAddress, allMaps);
                 if (progElf.isValid() && progElf.dynamic())
                     break;
