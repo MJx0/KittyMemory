@@ -373,7 +373,7 @@ namespace KittyScanner
             return ElfScanner(elfBase, maps);
         }
 
-        static ElfScanner createWithBase(const KittyMemory::ProcMap &elfMap,
+        static ElfScanner createWithMap(const KittyMemory::ProcMap &elfMap,
                                          const std::vector<KittyMemory::ProcMap> &maps = KittyMemory::getAllMaps())
         {
             return ElfScanner(elfMap.startAddress, maps);
