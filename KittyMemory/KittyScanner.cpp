@@ -1047,10 +1047,10 @@ namespace KittyScanner
         for (const auto &it : maps)
         {
 #ifdef __LP64__
-            if (it.startAddress >= 0x7fffffff0000)
+            if (it.startAddress >= (0x7fffffffffff-0x1000))
                 continue;
 #else
-            if (it.startAddress >= 0xffff0000)
+            if (it.startAddress >= (0xffffffff-0x1000))
                 continue;
 #endif
 
