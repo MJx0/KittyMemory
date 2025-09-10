@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <dirent.h>
+#include <mutex>
 
 #define KT_PAGE_SIZE (sysconf(_SC_PAGE_SIZE))
 
@@ -140,8 +141,11 @@ namespace KittyUtils
     {
         using param_type = typename std::uniform_int_distribution<T>::param_type;
 
-        thread_local static std::mt19937 gen{std::random_device{}()};
-        thread_local static std::uniform_int_distribution<T> dist;
+        static std::mutex mtx;
+        std::lock_guard<std::mutex> lock(mtx);
+
+        static std::mt19937 gen{std::random_device{}()};
+        static std::uniform_int_distribution<T> dist;
 
         return dist(gen, param_type{min, max});
     }

@@ -8,6 +8,7 @@
 #ifdef __ANDROID__
 #include <dlfcn.h>
 #include <unordered_map>
+#include <mutex>
 #endif
 
 #include "KittyMemory.hpp"

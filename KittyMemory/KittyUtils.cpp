@@ -121,8 +121,11 @@ namespace KittyUtils
     {
         static const std::string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-        thread_local static std::default_random_engine rnd(std::random_device{}());
-        thread_local static std::uniform_int_distribution<std::string::size_type> dist(0, chars.size() - 1);
+        static std::mutex mtx;
+        std::lock_guard<std::mutex> lock(mtx);
+
+        static std::default_random_engine rnd(std::random_device{}());
+        static std::uniform_int_distribution<std::string::size_type> dist(0, chars.size() - 1);
 
         std::string str(length, '\0');
         for (size_t i = 0; i < length; ++i)

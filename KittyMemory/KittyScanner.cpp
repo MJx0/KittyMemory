@@ -1023,8 +1023,32 @@ namespace KittyScanner
 
     std::vector<ElfScanner> ElfScanner::getAllELFs(EScanElfType type, EScanElfFilter filter)
     {
-        static thread_local std::unordered_map<uintptr_t, ElfScanner> cached_elfs;
+        static std::mutex mtx;
+        std::lock_guard<std::mutex> lock(mtx);
+
+        static std::unordered_map<uintptr_t, ElfScanner> cached_elfs;
         std::vector<ElfScanner> elfs;
+
+        auto maps = KittyMemory::getAllMaps();
+        if (maps.empty())
+        {
+            KITTY_LOGD("getAllELFs: Failed to get process maps.");
+            return elfs;
+        }
+
+        std::vector<uintptr_t> invalid_keys;
+        for (auto &it : cached_elfs)
+        {
+            if (it.first && !KittyMemory::getAddressMap(it.first, maps).readable)
+            {
+                invalid_keys.push_back(it.first);
+            }
+        }
+
+        for (auto &it : invalid_keys)
+        {
+            cached_elfs.erase(it);
+        }
 
         const auto progMachine = getProgramElf().header().e_machine;
         static auto eMachineCheck = [](EScanElfType type, int a, int b) -> bool {
@@ -1034,13 +1058,6 @@ namespace KittyScanner
 
         const bool isAppFilter = filter == EScanElfFilter::App;
         const bool isSysFilter = filter == EScanElfFilter::System;
-
-        std::vector<KittyMemory::ProcMap> maps = KittyMemory::getAllMaps();
-        if (maps.empty())
-        {
-            KITTY_LOGD("getAllELFs: Failed to get process maps.");
-            return elfs;
-        }
 
         unsigned long lastElfNode = 0;
 
@@ -1130,20 +1147,6 @@ namespace KittyScanner
                 lastElfNode = elf.baseSegment().inode;
                 cached_elfs[it.startAddress] = elf;
             }
-        }
-
-        std::vector<uintptr_t> invalid_keys;
-        for (auto &it : cached_elfs)
-        {
-            if (it.first && !KittyMemory::getAddressMap(it.first, maps).readable)
-            {
-                invalid_keys.push_back(it.first);
-            }
-        }
-
-        for (auto &it : invalid_keys)
-        {
-            cached_elfs.erase(it);
         }
 
         return elfs;
