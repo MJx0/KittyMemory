@@ -30,8 +30,8 @@ private:
 
         inline bool canMergeWith(const RegionInfo &other) const
         {
-            return end == other.start && readable == other.readable &&
-                   writable == other.writable && executable == other.executable;
+            return end == other.start && readable == other.readable && writable == other.writable &&
+                   executable == other.executable;
         }
     };
 
@@ -45,14 +45,12 @@ private:
 
 public:
     KittyPtrValidator()
-        : task_(mach_task_self()), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(false),
-          last_region_index_(0)
+        : task_(mach_task_self()), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(false), last_region_index_(0)
     {
     }
 
     KittyPtrValidator(mach_port_t task, bool use_cache)
-        : task_(task), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(use_cache),
-          last_region_index_(0)
+        : task_(task), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(use_cache), last_region_index_(0)
     {
         if (use_cache_)
             refreshRegionCache();
@@ -72,30 +70,11 @@ public:
         }
     }
 
-    inline bool isPtrReadable(uintptr_t ptr, size_t len = sizeof(void *))
-    {
-        if (ptr == 0)
-            return false;
-        RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.readable && (ptr + len) <= region.end;
-    }
+    bool isPtrReadable(uintptr_t ptr, size_t len = sizeof(void *));
 
-    inline bool isPtrWritable(uintptr_t ptr, size_t len = sizeof(void *))
-    {
-        if (ptr == 0)
-            return false;
-        RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.writable && (ptr + len) <= region.end;
-    }
+    bool isPtrWritable(uintptr_t ptr, size_t len = sizeof(void *));
 
-    inline bool isPtrExecutable(uintptr_t ptr, size_t len = sizeof(void *))
-    {
-        if (ptr == 0)
-            return false;
-        RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.executable &&
-               (ptr + len) <= region.end;
-    }
+    bool isPtrExecutable(uintptr_t ptr, size_t len = sizeof(void *));
 
     inline bool isPtrInAddressSpace(uintptr_t ptr)
     {
@@ -156,8 +135,8 @@ private:
 
         inline bool canMergeWith(const RegionInfo &other) const
         {
-            return end == other.start && readable == other.readable &&
-                   writable == other.writable && executable == other.executable;
+            return end == other.start && readable == other.readable && writable == other.writable &&
+                   executable == other.executable;
         }
     };
 
@@ -176,15 +155,12 @@ private:
     bool _findRegion(uintptr_t addr, RegionInfo *region);
 
 public:
-    KittyPtrValidator()
-        : pid_(getpid()), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(false),
-          last_region_index_(0)
+    KittyPtrValidator() : pid_(getpid()), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(false), last_region_index_(0)
     {
     }
 
     KittyPtrValidator(pid_t pid, bool use_cache)
-        : pid_(pid), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(use_cache),
-          last_region_index_(0)
+        : pid_(pid), page_size_(sysconf(_SC_PAGESIZE)), use_cache_(use_cache), last_region_index_(0)
     {
         if (use_cache_)
             refreshRegionCache();
@@ -216,30 +192,11 @@ public:
         }
     }
 
-    inline bool isPtrReadable(uintptr_t ptr, size_t len = sizeof(void *))
-    {
-        if (ptr == 0)
-            return false;
-        RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.readable && (ptr + len) <= region.end;
-    }
+    bool isPtrReadable(uintptr_t ptr, size_t len = sizeof(void *));
 
-    inline bool isPtrWritable(uintptr_t ptr, size_t len = sizeof(void *))
-    {
-        if (ptr == 0)
-            return false;
-        RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.writable && (ptr + len) <= region.end;
-    }
+    bool isPtrWritable(uintptr_t ptr, size_t len = sizeof(void *));
 
-    inline bool isPtrExecutable(uintptr_t ptr, size_t len = sizeof(void *))
-    {
-        if (ptr == 0)
-            return false;
-        RegionInfo region(0, 0, false, false, false);
-        return _findRegion(ptr, &region) && region.executable &&
-               (ptr + len) <= region.end;
-    }
+    bool isPtrExecutable(uintptr_t ptr, size_t len = sizeof(void *));
 
     inline bool isPtrInAddressSpace(uintptr_t ptr)
     {
