@@ -1527,31 +1527,11 @@ namespace KittyScanner
             return false;
         }
 
-        _nbItf_data.version = *(int *)_nbItf;
-        switch (_nbItf_data.version)
+        memcpy(&(_nbItf_data.version), (const void *)(_nbItf), sizeof(int));
+
+        _nbItf_data_size = nbItf_data_t::GetStructSize(_nbItf_data.version);
+        if (_nbItf_data_size == 0)
         {
-        case 2: // SIGNAL_VERSION
-            _nbItf_data_size = sizeof(uintptr_t) * 8;
-            break;
-        case 3: // NAMESPACE_VERSION
-            _nbItf_data_size = sizeof(uintptr_t) * 15;
-            break;
-        case 4: // VENDOR_NAMESPACE_VERSION
-            _nbItf_data_size = sizeof(uintptr_t) * 16;
-            break;
-        case 5: // RUNTIME_NAMESPACE_VERSION
-            _nbItf_data_size = sizeof(uintptr_t) * 17;
-            break;
-        case 6: // PRE_ZYGOTE_FORK_VERSION
-            _nbItf_data_size = sizeof(uintptr_t) * 18;
-            break;
-        case 7: // CRITICAL_NATIVE_SUPPORT_VERSION
-            _nbItf_data_size = sizeof(uintptr_t) * 19;
-            break;
-        case 8: // IDENTIFY_NATIVELY_BRIDGED_FUNCTION_POINTERS_VERSION
-            _nbItf_data_size = sizeof(uintptr_t) * 21;
-            break;
-        default:
             KITTY_LOGD("NativeBridgeScanner: Unsupported nativebridge version (%d)", _nbItf_data.version);
             return false;
         }
@@ -1596,8 +1576,8 @@ namespace KittyScanner
             size_t phnum = 0;
         } data;
 
-	data.phdr = _sodlElf.phdr();
-	data.phnum = _sodlElf.programHeaders().size();
+        data.phdr = _sodlElf.phdr();
+        data.phnum = _sodlElf.programHeaders().size();
 
         KITTY_LOGD("NativeBridgeScanner: sodl phdr { %p, %zu }", (void *)(data.phdr), data.phnum);
 
@@ -1893,7 +1873,7 @@ namespace KittyScanner
         if (!handle || !nb.init())
             return nullptr;
 
-        if (nbData.version < 28)
+        if (nbData.version < 2)
         {
             KITTY_LOGD("nb_dlsym: nativebridge version (%d) is not supported", nbData.version);
             return nullptr;

@@ -515,6 +515,26 @@ namespace KittyScanner
         KT_JNICallTypeCriticalNative = 2,
     };
 
+    enum KT_NativeBridgeImplementationVersion
+    {
+        // first version, not used.
+        KT_NB_DEFAULT_VERSION = 1,
+        // The version which signal semantic is introduced.
+        KT_NB_SIGNAL_VERSION = 2,
+        // The version which namespace semantic is introduced.
+        KT_NB_NAMESPACE_VERSION = 3,
+        // The version with vendor namespaces
+        KT_NB_VENDOR_NAMESPACE_VERSION = 4,
+        // The version with runtime namespaces
+        KT_NB_RUNTIME_NAMESPACE_VERSION = 5,
+        // The version with pre-zygote-fork hook to support app-zygotes.
+        KT_NB_PRE_ZYGOTE_FORK_VERSION = 6,
+        // The version with critical_native support
+        KT_NB_CRITICAL_NATIVE_SUPPORT_VERSION = 7,
+        // The version with native bridge detection fallback for function pointers
+        KT_NB_IDENTIFY_NATIVELY_BRIDGED_FUNCTION_POINTERS_VERSION = 8,
+    };
+
     struct nbItf_data_t
     {
         inline nbItf_data_t()
@@ -549,6 +569,28 @@ namespace KittyScanner
         void *(*getTrampolineForFunctionPointer)(const void *method, const char *shorty, uint32_t len,
                                                  enum KT_JNICallType jni_call_type);
         bool (*isNativeBridgeFunctionPointer)(const void *method);
+
+        inline static size_t GetStructSize(int version)
+        {
+            switch (version)
+            {
+            case KT_NB_SIGNAL_VERSION:
+                return sizeof(uintptr_t) * 8;
+            case KT_NB_NAMESPACE_VERSION:
+                return sizeof(uintptr_t) * 15;
+            case KT_NB_VENDOR_NAMESPACE_VERSION:
+                return sizeof(uintptr_t) * 16;
+            case KT_NB_RUNTIME_NAMESPACE_VERSION:
+                return sizeof(uintptr_t) * 17;
+            case KT_NB_PRE_ZYGOTE_FORK_VERSION:
+                return sizeof(uintptr_t) * 18;
+            case KT_NB_CRITICAL_NATIVE_SUPPORT_VERSION:
+                return sizeof(uintptr_t) * 19;
+            case KT_NB_IDENTIFY_NATIVELY_BRIDGED_FUNCTION_POINTERS_VERSION:
+                return sizeof(uintptr_t) * 21;
+            }
+            return 0;
+        }
     };
 
     class NativeBridgeScanner
