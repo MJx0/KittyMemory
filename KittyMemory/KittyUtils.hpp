@@ -253,15 +253,7 @@ namespace KittyUtils
 
     namespace Zip
     {
-#define KT_EOCD_SIGNATURE 0x06054b50
-#define KT_ZIP64_EOCD_SIGNATURE 0x06064b50
-#define KT_ZIP64_EOCD_LOCATOR 0x07064b50
-#define KT_CENTRAL_DIR_SIGNATURE 0x02014b50
-#define KT_LOCAL_HEADER_SIGNATURE 0x04034b50
-#define KT_ZIP64_EXTRA_ID 0x0001
-#define KT_MAX_NAME_LEN 65535 // ZIP max file name length
-
-        struct ZipFileInfo
+        struct ZipEntryInfo
         {
             std::string fileName;
             uint64_t compressedSize = 0;
@@ -273,21 +265,20 @@ namespace KittyUtils
             uint64_t dataOffset = 0;
         };
 
-        struct ZipFileMMap
+        struct ZipEntryMMap
         {
-            void *data = nullptr;
-            size_t size = 0;
-			
-	    ZipFileMMap() = default;
-	    ZipFileMMap(void *data, size_t size) : data(data), size(size) {}
+            void *mappingBase = nullptr;
+            size_t mappingSize = 0;
+            uint8_t *data = nullptr;
+            uint64_t size = 0;
         };
 
-        bool GetCentralDirInfo(int fd, uint64_t fileSize, bool &isZip64, uint64_t &cdOffset, uint64_t &totalEntries);
+        bool findCentralDirectory(const uint8_t *data, uint64_t fileSize, uint64_t *cdOffset, uint64_t *totalEntries);
 
-        std::vector<ZipFileInfo> listFilesInZip(const std::string &zipPath);
+        std::vector<ZipEntryInfo> listEntriesInZip(const std::string &zipPath);
 
-        ZipFileInfo GetFileInfoByDataOffset(const std::string &zipPath, uint64_t dataOffset);
-        ZipFileMMap MMapFileByDataOffset(const std::string &zipPath, uint64_t dataOffset);
+        bool GetEntryInfoByDataOffset(const std::string &zipPath, uint64_t dataOffset, ZipEntryInfo *out);
+        bool MMapEntryByDataOffset(const std::string &zipPath, uint64_t dataOffset, ZipEntryMMap *out);
     } // namespace Zip
 
 #endif // __ANDROID__

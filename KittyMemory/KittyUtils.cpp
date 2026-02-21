@@ -327,211 +327,346 @@ namespace KittyUtils
 
     namespace Zip
     {
-        bool GetCentralDirInfo(int fd, uint64_t fileSize, bool &isZip64, uint64_t &cdOffset, uint64_t &totalEntries)
+#define KT_MIN_EOCD_SIZE 22
+#define KT_EOCD_SIGNATURE 0x06054b50
+#define KT_ZIP64_EOCD_SIGNATURE 0x06064b50
+#define KT_ZIP64_EOCD_LOCATOR 0x07064b50
+#define KT_CENTRAL_DIR_SIGNATURE 0x02014b50
+#define KT_LOCAL_HEADER_SIGNATURE 0x04034b50
+#define KT_ZIP64_EXTRA_ID 0x0001
+#define KT_MAX_NAME_LEN 65535
+#define KT_MAX_EOCD_SEARCH (1024 * 64)
+#define KT_CENTRAL_DIR_SIZE 46
+#define KT_LOCAL_HEADER_SIZE 30
+
+        inline bool read16(const uint8_t *base, uint64_t size, uint64_t offset, uint16_t &out)
         {
-            if (fileSize < 22)
-            {
-                KITTY_LOGD("File too small: %" PRIx64 " bytes", fileSize);
+            if (offset + 2 > size)
                 return false;
-            }
-
-            void *map = mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
-            if (map == MAP_FAILED)
-            {
-                KITTY_LOGD("mmap failed: %s", strerror(errno));
-                return false;
-            }
-
-            uint8_t *data = static_cast<uint8_t *>(map);
-
-            // Find EOCD or ZIP64 EOCD locator
-            int64_t offset = fileSize - 22;
-            uint32_t sig;
-            while (offset >= 0)
-            {
-                sig = *reinterpret_cast<uint32_t *>(data + offset);
-                if (sig == KT_EOCD_SIGNATURE || (sig == KT_ZIP64_EOCD_LOCATOR && *reinterpret_cast<uint32_t *>(data + offset - 20) == KT_ZIP64_EOCD_SIGNATURE))
-                {
-                    break;
-                }
-                --offset;
-            }
-
-            if (offset < 0)
-            {
-                KITTY_LOGD("EOCD not found");
-                munmap(map, fileSize);
-                return false;
-            }
-
-            // Read EOCD or ZIP64 EOCD
-            isZip64 = (sig == KT_ZIP64_EOCD_LOCATOR);
-            if (isZip64)
-            {
-                totalEntries = *reinterpret_cast<uint64_t *>(data + offset - 20 + 12);
-                cdOffset = *reinterpret_cast<uint64_t *>(data + offset - 20 + 36);
-            }
-            else
-            {
-                totalEntries = *reinterpret_cast<uint16_t *>(data + offset + 8);
-                cdOffset = *reinterpret_cast<uint32_t *>(data + offset + 16);
-            }
-
-            munmap(map, fileSize);
+            std::memcpy(&out, base + offset, 2);
             return true;
         }
 
-        std::vector<ZipFileInfo> listFilesInZip(const std::string &zipPath)
+        inline bool read32(const uint8_t *base, uint64_t size, uint64_t offset, uint32_t &out)
         {
-            std::vector<ZipFileInfo> files;
+            if (offset + 4 > size)
+                return false;
+            std::memcpy(&out, base + offset, 4);
+            return true;
+        }
+
+        inline bool read64(const uint8_t *base, uint64_t size, uint64_t offset, uint64_t &out)
+        {
+            if (offset + 8 > size)
+                return false;
+            std::memcpy(&out, base + offset, 8);
+            return true;
+        }
+
+        bool findCentralDirectory(const uint8_t *data, uint64_t fileSize, uint64_t *cdOffset, uint64_t *totalEntries)
+        {
+            if (fileSize < KT_MIN_EOCD_SIZE)
+                return false;
+
+            uint64_t searchStart = (fileSize > KT_MAX_EOCD_SEARCH) ? fileSize - KT_MAX_EOCD_SEARCH : 0;
+
+            for (int64_t offset = fileSize - 4; offset >= (int64_t)searchStart; --offset)
+            {
+                uint32_t sig;
+                if (!read32(data, fileSize, offset, sig))
+                    continue;
+
+                if (sig == KT_EOCD_SIGNATURE)
+                {
+                    uint16_t entries16;
+                    uint32_t cdOff32;
+
+                    if (!read16(data, fileSize, offset + 10, entries16))
+                        return false;
+                    if (!read32(data, fileSize, offset + 16, cdOff32))
+                        return false;
+
+                    if (totalEntries)
+                        *totalEntries = entries16;
+
+                    if (cdOffset)
+                        *cdOffset = cdOff32;
+
+                    return true;
+                }
+
+                if (sig == KT_ZIP64_EOCD_LOCATOR)
+                {
+                    uint64_t zip64EOCDOffset;
+                    if (!read64(data, fileSize, offset + 8, zip64EOCDOffset))
+                        return false;
+
+                    uint32_t zip64sig;
+                    if (!read32(data, fileSize, zip64EOCDOffset, zip64sig))
+                        return false;
+
+                    if (zip64sig != KT_ZIP64_EOCD_SIGNATURE)
+                        return false;
+
+                    uint64_t entries64;
+                    uint64_t cdOff64;
+
+                    if (!read64(data, fileSize, zip64EOCDOffset + 24, entries64))
+                        return false;
+
+                    if (!read64(data, fileSize, zip64EOCDOffset + 48, cdOff64))
+                        return false;
+
+                    if (totalEntries)
+                        *totalEntries = entries64;
+
+                    if (cdOffset)
+                        *cdOffset = cdOff64;
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        std::vector<ZipEntryInfo> listEntriesInZip(const std::string &zipPath)
+        {
+            std::vector<ZipEntryInfo> ents;
+
             int fd = KT_EINTR_RETRY(open(zipPath.c_str(), O_RDONLY));
             if (fd < 0)
-            {
-                KITTY_LOGD("open failed: %s, error: %s", zipPath.c_str(), strerror(errno));
-                return files;
-            }
+                return ents;
 
-            // Get file size
-            struct stat st = {};
+            struct stat st{};
             if (fstat(fd, &st) < 0)
             {
-                KITTY_LOGD("fstat failed: %s", strerror(errno));
-                close(fd);
-                return files;
+                KT_EINTR_RETRY(close(fd));
+                return ents;
             }
+
             uint64_t fileSize = st.st_size;
-
-            // Get central directory info
-            bool isZip64;
-            uint64_t cdOffset, totalEntries;
-            if (!GetCentralDirInfo(fd, fileSize, isZip64, cdOffset, totalEntries))
+            if (fileSize < KT_MIN_EOCD_SIZE)
             {
-                close(fd);
-                return files;
+                KT_EINTR_RETRY(close(fd));
+                return ents;
             }
 
-            // Map file for parsing
             void *map = mmap(nullptr, fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
-            if (map == MAP_FAILED)
+            if (!map || map == MAP_FAILED)
             {
-                KITTY_LOGD("mmap failed: %s", strerror(errno));
-                close(fd);
-                return files;
+                KT_EINTR_RETRY(close(fd));
+                return ents;
             }
-            uint8_t *data = static_cast<uint8_t *>(map);
 
-            // Parse central directory
-            for (uint64_t offset = cdOffset, i = 0; i < totalEntries; ++i)
+            const uint8_t *data = static_cast<uint8_t *>(map);
+
+            uint64_t cdOffset = 0;
+            uint64_t totalEntries = 0;
+
+            if (!findCentralDirectory(data, fileSize, &cdOffset, &totalEntries))
             {
-                if (*reinterpret_cast<uint32_t *>(data + offset) != KT_CENTRAL_DIR_SIGNATURE)
-                {
-                    KITTY_LOGD("Invalid central directory signature at entry %" PRIu64, i);
-                    break;
-                }
+                munmap(map, fileSize);
+                KT_EINTR_RETRY(close(fd));
+                return ents;
+            }
 
-                ZipFileInfo info;
-                info.compressionMethod = *reinterpret_cast<uint16_t *>(data + offset + 10);
-                info.modTime = *reinterpret_cast<uint16_t *>(data + offset + 12);
-                info.modDate = *reinterpret_cast<uint16_t *>(data + offset + 14);
-                info.crc32 = *reinterpret_cast<uint32_t *>(data + offset + 16);
-                uint32_t compSize32 = *reinterpret_cast<uint32_t *>(data + offset + 20);
-                uint32_t uncompSize32 = *reinterpret_cast<uint32_t *>(data + offset + 24);
+            if (cdOffset >= fileSize)
+            {
+                munmap(map, fileSize);
+                KT_EINTR_RETRY(close(fd));
+                return ents;
+            }
+
+            uint64_t offset = cdOffset;
+            uint64_t parsedEntries = 0;
+
+            while (offset + KT_CENTRAL_DIR_SIZE <= fileSize)
+            {
+                uint32_t sig;
+                if (!read32(data, fileSize, offset, sig))
+                    break;
+
+                if (sig != KT_CENTRAL_DIR_SIGNATURE)
+                    break;
+
+                ZipEntryInfo info{};
+
+                read16(data, fileSize, offset + 10, info.compressionMethod);
+                read16(data, fileSize, offset + 12, info.modTime);
+                read16(data, fileSize, offset + 14, info.modDate);
+                read32(data, fileSize, offset + 16, info.crc32);
+
+                uint32_t compSize32, uncompSize32;
+                read32(data, fileSize, offset + 20, compSize32);
+                read32(data, fileSize, offset + 24, uncompSize32);
+
                 info.compressedSize = compSize32;
                 info.uncompressedSize = uncompSize32;
-                uint16_t nameLen = *reinterpret_cast<uint16_t *>(data + offset + 28);
-                uint16_t extraLen = *reinterpret_cast<uint16_t *>(data + offset + 30);
-                uint16_t commentLen = *reinterpret_cast<uint16_t *>(data + offset + 32);
 
-                // Read file name
-                if (nameLen <= KT_MAX_NAME_LEN)
+                uint16_t nameLen, extraLen, commentLen;
+                read16(data, fileSize, offset + 28, nameLen);
+                read16(data, fileSize, offset + 30, extraLen);
+                read16(data, fileSize, offset + 32, commentLen);
+
+                uint32_t localHeaderOffset32;
+                read32(data, fileSize, offset + 42, localHeaderOffset32);
+
+                uint64_t entrySize = KT_CENTRAL_DIR_SIZE + nameLen + extraLen + commentLen;
+                if (offset + entrySize > fileSize)
+                    break;
+
+                if (nameLen > KT_MAX_NAME_LEN)
+                    break;
+
+                info.fileName.assign(reinterpret_cast<const char *>(data + offset + KT_CENTRAL_DIR_SIZE), nameLen);
+
+                uint64_t localHeaderOffset = localHeaderOffset32;
+
+                // ZIP64 handling
+                if (compSize32 == 0xFFFFFFFF || uncompSize32 == 0xFFFFFFFF || localHeaderOffset32 == 0xFFFFFFFF)
                 {
-                    info.fileName.assign(reinterpret_cast<char *>(data + offset + 46), nameLen);
+                    uint64_t extraOffset = offset + KT_CENTRAL_DIR_SIZE + nameLen;
+                    uint64_t endExtra = extraOffset + extraLen;
 
-                    // Get local header offset
-                    uint64_t localOffset = isZip64 && compSize32 == 0xFFFFFFFF ? *reinterpret_cast<uint64_t *>(data + offset + 46 + nameLen + (extraLen >= 24 ? 20 : extraLen)) : *reinterpret_cast<uint32_t *>(data + offset + 42);
-
-                    // Update sizes for ZIP64
-                    if (isZip64 && compSize32 == 0xFFFFFFFF)
+                    while (extraOffset + 4 <= endExtra)
                     {
-                        for (uint16_t j = 0; j < extraLen;)
+                        uint16_t id, size;
+                        read16(data, fileSize, extraOffset, id);
+                        read16(data, fileSize, extraOffset + 2, size);
+
+                        if (extraOffset + 4 + size > endExtra)
+                            break;
+
+                        if (id == KT_ZIP64_EXTRA_ID)
                         {
-                            uint16_t id = *reinterpret_cast<uint16_t *>(data + offset + 46 + nameLen + j);
-                            uint16_t size = *reinterpret_cast<uint16_t *>(data + offset + 46 + nameLen + j + 2);
-                            if (id == KT_ZIP64_EXTRA_ID && size >= 16)
+                            uint64_t fieldOffset = extraOffset + 4;
+
+                            if (uncompSize32 == 0xFFFFFFFF)
                             {
-                                info.uncompressedSize = *reinterpret_cast<uint64_t *>(data + offset + 46 + nameLen + j + 4);
-                                info.compressedSize = *reinterpret_cast<uint64_t *>(data + offset + 46 + nameLen + j + 12);
-                                break;
+                                read64(data, fileSize, fieldOffset, info.uncompressedSize);
+                                fieldOffset += 8;
                             }
-                            j += 4 + size;
+
+                            if (compSize32 == 0xFFFFFFFF)
+                            {
+                                read64(data, fileSize, fieldOffset, info.compressedSize);
+                                fieldOffset += 8;
+                            }
+
+                            if (localHeaderOffset32 == 0xFFFFFFFF)
+                            {
+                                read64(data, fileSize, fieldOffset, localHeaderOffset);
+                            }
+
+                            break;
                         }
+
+                        extraOffset += 4 + size;
                     }
-
-                    // Calculate data offset
-                    uint16_t localNameLen = *reinterpret_cast<uint16_t *>(data + localOffset + 26);
-                    uint16_t localExtraLen = *reinterpret_cast<uint16_t *>(data + localOffset + 28);
-                    info.dataOffset = localOffset + 30 + localNameLen + localExtraLen;
-
-                    files.push_back(info);
                 }
 
-                offset += 46 + nameLen + extraLen + commentLen;
+                // Validate local header
+                if (localHeaderOffset + KT_LOCAL_HEADER_SIZE > fileSize)
+                    break;
+
+                uint16_t localNameLen, localExtraLen;
+                read16(data, fileSize, localHeaderOffset + 26, localNameLen);
+                read16(data, fileSize, localHeaderOffset + 28, localExtraLen);
+
+                info.dataOffset = localHeaderOffset + KT_LOCAL_HEADER_SIZE + localNameLen + localExtraLen;
+
+                if (info.dataOffset > fileSize)
+                    break;
+
+                ents.push_back(std::move(info));
+
+                offset += entrySize;
+                parsedEntries++;
+
+                if (parsedEntries >= totalEntries)
+                    break;
             }
 
             munmap(map, fileSize);
-            close(fd);
-            return files;
+            KT_EINTR_RETRY(close(fd));
+
+            return ents;
         }
 
-        ZipFileInfo GetFileInfoByDataOffset(const std::string &zipPath, uint64_t dataOffset)
+        bool GetEntryInfoByDataOffset(const std::string &zipPath, uint64_t dataOffset, ZipEntryInfo *out)
         {
-            ZipFileInfo info{};
+            if (out)
+                *out = {};
 
-            const auto files = listFilesInZip(zipPath);
-            for (const auto &it : files)
+            const auto ents = listEntriesInZip(zipPath);
+            for (const auto &it : ents)
             {
                 if (it.dataOffset == dataOffset)
                 {
-                    info = it;
-                    break;
+                    if (out)
+                        *out = it;
+
+                    return true;
                 }
             }
 
-            return info;
+            return false;
         }
 
-        ZipFileMMap MMapFileByDataOffset(const std::string &zipPath, uint64_t dataOffset)
+        bool MMapEntryByDataOffset(const std::string &zipPath, uint64_t dataOffset, ZipEntryMMap *out)
         {
-            ZipFileMMap result;
+            if (out)
+                *out = {};
+
+            ZipEntryInfo ent{};
+            if (!GetEntryInfoByDataOffset(zipPath, dataOffset, &ent))
+                return false;
+
+            uint64_t compressedSize = ent.compressedSize;
+
             int fd = KT_EINTR_RETRY(open(zipPath.c_str(), O_RDONLY));
             if (fd < 0)
+                return false;
+
+            struct stat st{};
+            if (fstat(fd, &st) < 0)
             {
-                KITTY_LOGD("open failed: %s, error: %s", zipPath.c_str(), strerror(errno));
-                return result;
+                KT_EINTR_RETRY(close(fd));
+                return false;
             }
 
-            // Get file info to obtain compressed size
-            ZipFileInfo info = GetFileInfoByDataOffset(zipPath, dataOffset);
-            if (info.fileName.empty())
+            uint64_t fileSize = st.st_size;
+
+            if (dataOffset >= fileSize || dataOffset + compressedSize > fileSize)
             {
-                KITTY_LOGD("No file found at offset %" PRIx64, dataOffset);
-                close(fd);
-                return result;
+                KT_EINTR_RETRY(close(fd));
+                return false;
             }
 
-            // mmap the data
-            result.size = info.compressedSize;
-            result.data = mmap(nullptr, result.size, PROT_READ, MAP_PRIVATE, fd, dataOffset);
-            if (result.data == MAP_FAILED)
+            const size_t pageSize = sysconf(_SC_PAGE_SIZE);
+            uint64_t alignedOffset = dataOffset & ~(uint64_t(pageSize - 1));
+            uint64_t offsetDiff = dataOffset - alignedOffset;
+            uint64_t mapSize = offsetDiff + compressedSize;
+
+            void *map = mmap(nullptr, mapSize, PROT_READ, MAP_PRIVATE, fd, alignedOffset);
+
+            KT_EINTR_RETRY(close(fd));
+
+            if (!map || map == MAP_FAILED)
+                return false;
+
+            if (out)
             {
-                KITTY_LOGD("mmap failed at offset %" PRIx64 ": %s", dataOffset, strerror(errno));
-                result.size = 0;
+                out->mappingBase = map;
+                out->mappingSize = mapSize;
+                out->data = static_cast<uint8_t *>(map) + offsetDiff;
+                out->size = compressedSize;
             }
 
-            close(fd);
-            return result;
+            return true;
         }
-    }  // namespace Zip
+    } // namespace Zip
 
 #endif  // __ANDROID__
 
