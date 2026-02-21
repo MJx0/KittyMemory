@@ -104,6 +104,21 @@ namespace KittyUtils
     std::string getExternalStorage();
     int getAndroidVersion();
     int getAndroidSDK();
+
+    inline uintptr_t untagHeepPtr(uintptr_t p)
+    {
+#if defined(__aarch64__)
+        /*
+        static constexpr uintptr_t POINTER_TAG = 0xB4;
+        static constexpr unsigned UNTAG_SHIFT = 40;
+        static constexpr unsigned CHECK_SHIFT = 48;
+        static constexpr unsigned TAG_SHIFT = 56;
+        */
+        return (p >> 56) == 0xB4 ? (p & ((static_cast<uintptr_t>(1) << 40) - 1)) : p;
+#else
+        return p;
+#endif
+    }
 #endif
 
     std::string fileNameFromPath(const std::string &filePath);
