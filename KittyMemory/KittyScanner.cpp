@@ -1270,7 +1270,8 @@ namespace KittyScanner
 
         for (const auto &sym : dsymbols())
         {
-            if (KittyUtils::String::StartsWith(sym.first, "__dl__ZL6solist"))
+            if (KittyUtils::String::StartsWith(sym.first, "__dl__ZL11solist_head") ||
+                KittyUtils::String::StartsWith(sym.first, "__dl__ZL6solist"))
             {
                 _linker_syms.solist = sym.second;
                 continue;
@@ -1280,7 +1281,8 @@ namespace KittyScanner
                 _linker_syms.somain = sym.second;
                 continue;
             }
-            if (KittyUtils::String::StartsWith(sym.first, "__dl__ZL6sonext"))
+            if (KittyUtils::String::StartsWith(sym.first, "__dl__ZL11solist_tail") ||
+                KittyUtils::String::StartsWith(sym.first, "__dl__ZL6sonext"))
             {
                 _linker_syms.sonext = sym.second;
                 continue;
