@@ -1445,13 +1445,18 @@ namespace KittyScanner
             return infos;
 
         auto maps = KittyMemory::getAllMaps();
-        uintptr_t si = solist();
+        uintptr_t si = solist(), prev = 0;
         while (si && KittyMemory::getAddressMap(si, maps).readable)
         {
             kitty_soinfo_t info = infoFromSoInfo_(si, maps);
             infos.push_back(info);
 
+            prev = si;
+
             si = *(uintptr_t *)(si + _soinfo_offsets.next);
+
+            if (si == prev)
+                break;
         }
         return infos;
     }
@@ -1773,13 +1778,18 @@ namespace KittyScanner
             return infos;
 
         auto maps = KittyMemory::getAllMaps();
-        uintptr_t si = _sodl;
+        uintptr_t si = _sodl, prev = 0;
         while (si && KittyMemory::getAddressMap(si, maps).readable)
         {
             kitty_soinfo_t info = infoFromSoInfo_(si, maps);
             infos.push_back(info);
 
+            prev = si;
+
             si = *(uintptr_t *)(si + _soinfo_offsets.next);
+
+            if (si == prev)
+                break;
         }
         return infos;
     }
