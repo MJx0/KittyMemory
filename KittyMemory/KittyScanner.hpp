@@ -387,28 +387,32 @@ namespace KittyScanner
         }
     };
 
+    struct kitty_linker_syms_t
+    {
+        uintptr_t solist = 0;
+        uintptr_t somain = 0;
+        uintptr_t sonext = 0;
+    };
+
+    struct kitty_soinfo_offsets_t
+    {
+        uintptr_t base = 0;
+        uintptr_t size = 0;
+        uintptr_t phdr = 0;
+        uintptr_t phnum = 0;
+        uintptr_t dyn = 0;
+        uintptr_t strtab = 0;
+        uintptr_t symtab = 0;
+        uintptr_t strsz = 0;
+        uintptr_t bias = 0;
+        uintptr_t next = 0;
+    };
+
     class LinkerScanner : public ElfScanner
     {
     protected:
-        struct
-        {
-            uintptr_t solist;
-            uintptr_t somain;
-            uintptr_t sonext;
-        } _linker_syms;
-        struct
-        {
-            uintptr_t base;
-            uintptr_t size;
-            uintptr_t phdr;
-            uintptr_t phnum;
-            uintptr_t dyn;
-            uintptr_t strtab;
-            uintptr_t symtab;
-            uintptr_t strsz;
-            uintptr_t bias;
-            uintptr_t next;
-        } _soinfo_offsets;
+        kitty_linker_syms_t _linker_syms;
+        kitty_soinfo_offsets_t _soinfo_offsets;
         bool _init;
 
         bool init();
@@ -445,6 +449,16 @@ namespace KittyScanner
         inline ElfScanner *asELF() const
         {
             return (ElfScanner *)this;
+        }
+
+        inline kitty_linker_syms_t linker_offsets() const
+        {
+            return _linker_syms;
+        }
+
+        inline kitty_soinfo_offsets_t soinfo_offsets() const
+        {
+            return _soinfo_offsets;
         }
 
         inline uintptr_t solist() const
@@ -542,19 +556,7 @@ namespace KittyScanner
     private:
         ElfScanner _nbElf, _nbImplElf, _sodlElf;
         uintptr_t _sodl;
-        struct
-        {
-            uintptr_t base;
-            uintptr_t size;
-            uintptr_t phdr;
-            uintptr_t phnum;
-            uintptr_t dyn;
-            uintptr_t strtab;
-            uintptr_t symtab;
-            uintptr_t strsz;
-            uintptr_t bias;
-            uintptr_t next;
-        } _soinfo_offsets;
+        kitty_soinfo_offsets_t _soinfo_offsets;
         bool _init;
         bool _isHoudini;
 
