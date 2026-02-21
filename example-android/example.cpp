@@ -240,7 +240,7 @@ void test_thread()
 
     for (const auto &it : elfs)
     {
-        KITTY_LOGD("elfs(%p) -> %s", (void *)it.base(), it.realPath().c_str());
+        KITTY_LOGI("elfs(%p) -> %s", (void *)it.base(), it.realPath().c_str());
     }
 
 #if defined(__x86_64__) || defined(__i386__)
