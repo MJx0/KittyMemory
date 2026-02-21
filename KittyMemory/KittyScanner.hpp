@@ -674,6 +674,8 @@ namespace KittyScanner
         static void *dlopen(const std::string &path, int flags);
         // native bridge get trampoline
         static void *dlsym(void *handle, const std::string &sym_name);
+        // native bridge unload library
+        static int dlclose(void *handle);
         // native bridge dlerror
         static const char *dlerror();
         // native bridge dlladdr

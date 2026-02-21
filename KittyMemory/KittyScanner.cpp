@@ -1893,6 +1893,29 @@ namespace KittyScanner
         return nbData.getTrampolineWithJNICallType(handle, sym_name.c_str(), nullptr, 0, KT_JNICallTypeRegular);
     }
 
+    int NativeBridgeLinker::dlclose(void *handle)
+    {
+#if !defined(__x86_64__) && !defined(__i386__)
+        return -1;
+#endif
+        auto &nb = NativeBridgeScanner::Get();
+        auto nbData = nb.nbItfData();
+
+        if (nbData.version < 3)
+        {
+            KITTY_LOGD("nb_dlclose: nativebridge version (%d) is not supported", nbData.version);
+            return -1;
+        }
+
+        if (nb.fnNativeBridgeInitialized && !nb.fnNativeBridgeInitialized())
+        {
+            KITTY_LOGD("nb_dlclose: nativebridge is not initialized");
+            return -1;
+        }
+
+        return nbData.unloadLibrary(handle);
+    }
+
     const char *NativeBridgeLinker::dlerror()
     {
 #if !defined(__x86_64__) && !defined(__i386__)
