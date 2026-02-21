@@ -1,3 +1,0 @@
-@ECHO off
-make
-pause
