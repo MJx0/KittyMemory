@@ -1345,23 +1345,48 @@ namespace KittyScanner
         {
             uintptr_t value = *(uintptr_t *)&si_buf[i];
 
-            if (value == si_elf.phdr())
+            if (!_soinfo_offsets.phdr && value == si_elf.phdr())
+            {
                 _soinfo_offsets.phdr = i;
-            if (value == si_elf.programHeaders().size())
+                continue;
+            }
+            if (!_soinfo_offsets.phnum && value == si_elf.header().e_phnum)
+            {
                 _soinfo_offsets.phnum = i;
-            else if (value == si_elf.loadSize() ||
-                     value == (si_elf.loadSize() + KittyMemory::getAddressMap(si_elf.end(), maps).length))
+                continue;
+            }
+            if (!_soinfo_offsets.size &&
+                (value == si_elf.loadSize() ||
+                 value == (si_elf.loadSize() + KittyMemory::getAddressMap(si_elf.end(), maps).length)))
+            {
                 _soinfo_offsets.size = i;
-            else if (value == si_elf.dynamic())
+                continue;
+            }
+            if (!_soinfo_offsets.dyn && value == si_elf.dynamic())
+            {
                 _soinfo_offsets.dyn = i;
-            else if (value == si_elf.stringTable())
+                continue;
+            }
+            if (!_soinfo_offsets.strtab && value == si_elf.stringTable())
+            {
                 _soinfo_offsets.strtab = i;
-            else if (value == si_elf.symbolTable())
+                continue;
+            }
+            if (!_soinfo_offsets.symtab && value == si_elf.symbolTable())
+            {
                 _soinfo_offsets.symtab = i;
-            else if (value == si_elf.loadBias() && i != _soinfo_offsets.base)
+                continue;
+            }
+            if (!_soinfo_offsets.bias && value == si_elf.loadBias() && i != _soinfo_offsets.base)
+            {
                 _soinfo_offsets.bias = i;
-            else if (value == si_elf.stringTableSize())
+                continue;
+            }
+            if (!_soinfo_offsets.strsz && value == si_elf.stringTableSize())
+            {
                 _soinfo_offsets.strsz = i;
+                continue;
+            }
         }
 
         KITTY_LOGD("soinfo_bias(%zx) | soinfo_size(%zx)", _soinfo_offsets.bias, _soinfo_offsets.size);
@@ -1670,23 +1695,49 @@ namespace KittyScanner
             for (size_t j = 0; j < si_buf_inner.size(); j += sizeof(uintptr_t))
             {
                 uintptr_t value = *(uintptr_t *)&si_buf_inner[j];
-                if (value == si_elf.phdr())
+
+                if (!_soinfo_offsets.phdr && value == si_elf.phdr())
+                {
                     _soinfo_offsets.phdr = j;
-                if (value == si_elf.programHeaders().size())
+                    continue;
+                }
+                if (!_soinfo_offsets.phnum && value == si_elf.header().e_phnum)
+                {
                     _soinfo_offsets.phnum = j;
-                else if (value == si_elf.loadSize() ||
-                         value == (si_elf.loadSize() + KittyMemory::getAddressMap(si_elf.end(), maps).length))
+                    continue;
+                }
+                if (!_soinfo_offsets.size &&
+                    (value == si_elf.loadSize() ||
+                     value == (si_elf.loadSize() + KittyMemory::getAddressMap(si_elf.end(), maps).length)))
+                {
                     _soinfo_offsets.size = j;
-                else if (value == si_elf.dynamic())
+                    continue;
+                }
+                if (!_soinfo_offsets.dyn && value == si_elf.dynamic())
+                {
                     _soinfo_offsets.dyn = j;
-                else if (value == si_elf.stringTable())
+                    continue;
+                }
+                if (!_soinfo_offsets.strtab && value == si_elf.stringTable())
+                {
                     _soinfo_offsets.strtab = j;
-                else if (value == si_elf.symbolTable())
+                    continue;
+                }
+                if (!_soinfo_offsets.symtab && value == si_elf.symbolTable())
+                {
                     _soinfo_offsets.symtab = j;
-                else if (j > _soinfo_offsets.size && value == si_elf.loadBias())
+                    continue;
+                }
+                if (!_soinfo_offsets.bias && value == si_elf.loadBias() && j != _soinfo_offsets.base)
+                {
                     _soinfo_offsets.bias = j;
-                else if (value == si_elf.stringTableSize())
+                    continue;
+                }
+                if (!_soinfo_offsets.strsz && value == si_elf.stringTableSize())
+                {
                     _soinfo_offsets.strsz = j;
+                    continue;
+                }
             }
 
             if (_soinfo_offsets.size && _soinfo_offsets.bias && _soinfo_offsets.dyn && _soinfo_offsets.symtab &&
