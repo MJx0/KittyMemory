@@ -64,7 +64,6 @@ FOR %%A IN (%ABIs%) DO (
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
         -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
         -DCMAKE_TOOLCHAIN_FILE=%NDK%\build\cmake\android.toolchain.cmake ^
-        -DANDROID_NDK="%NDK%" ^
         -DANDROID_ABI=%%A ^
         -DANDROID_PLATFORM=android-%ANDROID_API% ^
         -DANDROID_STL=c++_static
