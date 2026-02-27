@@ -1540,6 +1540,10 @@ namespace KittyScanner
             return false;
         }
 
+        *(uintptr_t *)&fnNativeBridgeInitialized = _nbElf.findSymbol("NativeBridgeInitialized");
+        if (fnNativeBridgeInitialized == nullptr)
+            *(uintptr_t *)&fnNativeBridgeInitialized = _nbElf.findSymbol("_ZN7android23NativeBridgeInitializedEv");
+
         _nbImplElf = ElfScanner::findElf("/libhoudini.so", EScanElfType::Native, EScanElfFilter::System);
         if (_nbImplElf.isValid())
             _isHoudini = true;
@@ -1572,10 +1576,6 @@ namespace KittyScanner
                    (void *)_nbItf_data_size);
 
         memcpy(&_nbItf_data, (const void *)(_nbItf), _nbItf_data_size);
-
-        *(uintptr_t *)&fnNativeBridgeInitialized = _nbElf.findSymbol("NativeBridgeInitialized");
-        if (fnNativeBridgeInitialized == nullptr)
-            *(uintptr_t *)&fnNativeBridgeInitialized = _nbElf.findSymbol("_ZN7android23NativeBridgeInitializedEv");
 
         // replace for nb v2
         if (_nbItf_data.version < 3)
@@ -1867,7 +1867,7 @@ namespace KittyScanner
     void *NativeBridgeLinker::dlopen(const std::string &path, int flags)
     {
 #if !defined(__x86_64__) && !defined(__i386__)
-        return nullptr;
+        return ::dlopen(path.c_str(), flags);
 #endif
         auto &nb = NativeBridgeScanner::Get();
         auto nbData = nb.nbItfData();
@@ -1928,7 +1928,7 @@ namespace KittyScanner
     void *NativeBridgeLinker::dlsym(void *handle, const std::string &sym_name)
     {
 #if !defined(__x86_64__) && !defined(__i386__)
-        return nullptr;
+        return ::dlsym(handle, sym_name.c_str());
 #endif
         auto &nb = NativeBridgeScanner::Get();
         auto nbData = nb.nbItfData();
@@ -1959,7 +1959,7 @@ namespace KittyScanner
     int NativeBridgeLinker::dlclose(void *handle)
     {
 #if !defined(__x86_64__) && !defined(__i386__)
-        return -1;
+        return ::dlclose(handle);
 #endif
         auto &nb = NativeBridgeScanner::Get();
         auto nbData = nb.nbItfData();
@@ -1982,7 +1982,7 @@ namespace KittyScanner
     const char *NativeBridgeLinker::dlerror()
     {
 #if !defined(__x86_64__) && !defined(__i386__)
-        return nullptr;
+        return ::dlerror();
 #endif
         auto &nb = NativeBridgeScanner::Get();
         auto nbData = nb.nbItfData();
