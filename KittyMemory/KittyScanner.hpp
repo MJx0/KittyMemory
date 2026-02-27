@@ -6,6 +6,7 @@
 #include <utility>
 
 #ifdef __ANDROID__
+#include <link.h>
 #include <dlfcn.h>
 #include <unordered_map>
 #include <mutex>
@@ -336,6 +337,22 @@ namespace KittyScanner
         {
             int a = getProgramElf().header().e_machine, b = _ehdr.e_machine;
             return a != 0 && b != 0 && a != b;
+        }
+
+        // app_proccess DT_DEBUG
+        inline bool find_r_debug(r_debug *out) const
+        {
+            for (auto &it : _dynamics)
+            {
+                if (it.d_tag == DT_DEBUG && it.d_un.d_val)
+                {
+                    if (out)
+                        memcpy(out, (void*)(it.d_un.d_val), sizeof(r_debug));
+
+                    return true;
+                }
+            }
+            return false;
         }
 
         /**
