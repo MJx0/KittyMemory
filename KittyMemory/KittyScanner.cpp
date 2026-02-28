@@ -794,7 +794,7 @@ namespace KittyScanner
                 return sym_ent->st_value < _loadBias ? _loadBias + sym_ent->st_value : sym_ent->st_value;
             };
 
-            KittyUtils::Zip::ZipEntryMMap mmap_info = {nullptr, 0};
+            KittyUtils::Zip::ZipEntryMMap mmap_info = {};
             auto baseSeg = baseSegment();
             if (baseSeg.offset != 0)
             {
@@ -834,7 +834,7 @@ namespace KittyScanner
                 return _dsymbolsMap;
             }
 
-            auto cleanup = [&] { munmap(mmap_info.data, mmap_info.size); };
+            auto cleanup = [&] { munmap(mmap_info.mappingBase, mmap_info.mappingSize); };
 
             KT_ElfW(Ehdr) *ehdr = reinterpret_cast<KT_ElfW(Ehdr) *>(mmap_info.data);
 
