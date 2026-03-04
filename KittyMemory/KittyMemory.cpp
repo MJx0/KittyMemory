@@ -30,8 +30,9 @@ namespace KittyMemory
 
     int memProtect(const void *address, size_t length, int protection)
     {
-        uintptr_t pageStart = KT_PAGE_START(address);
-        size_t pageLen = KT_PAGE_LEN2(address, length);
+        uintptr_t p = KittyUtils::untagHeepPtr(uintptr_t(address));
+        uintptr_t pageStart = KT_PAGE_START(p);
+        size_t pageLen = KT_PAGE_LEN2(p, length);
         int ret = mprotect(reinterpret_cast<void *>(pageStart), pageLen, protection);
         KITTY_LOGD("mprotect(%p, %zu, %d) = %d", (void *)pageStart, pageLen, protection, ret);
         return ret;
@@ -270,9 +271,11 @@ namespace KittyMemory
 
         ProcMap retMap{};
 
+        uintptr_t p = KittyUtils::untagHeepPtr(uintptr_t(address));
+
         for (auto &it : maps)
         {
-            if (it.isValid() && it.contains((uintptr_t)address))
+            if (it.isValid() && it.contains(p))
             {
                 retMap = it;
                 break;
@@ -286,6 +289,8 @@ namespace KittyMemory
     {
         if (!address || !size || destination.empty())
             return false;
+
+        address = KittyUtils::untagHeepPtr(address);
 
         auto allMaps = getAllMaps();
 
@@ -393,6 +398,9 @@ namespace KittyMemory
     {
         if (!address || !buffer || !len)
             return 0;
+
+        address = KittyUtils::untagHeepPtr(address);
+        buffer = KittyUtils::untagHeepPtr(buffer);
 
         pid_t pid = getpid();
 

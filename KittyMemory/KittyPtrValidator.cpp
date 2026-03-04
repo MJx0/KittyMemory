@@ -193,6 +193,7 @@ void KittyPtrValidator::_parseMapsFromBuffer(const std::string &buffer,
 
 bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
 {
+    addr = KittyUtils::untagHeepPtr(addr);
     if (!use_cache_)
     {
         std::string maps_data = _readMapsFile();
@@ -284,20 +285,13 @@ bool KittyPtrValidator::isPtrReadable(uintptr_t ptr, size_t len)
     if (ptr == 0)
         return false;
 
-    RegionInfo region(0, 0, false, false, false);
-    if (!_findRegion(ptr, &region) || !region.readable)
-        return false;
+    ptr = KittyUtils::untagHeepPtr(ptr);
 
-    if (region.end < (ptr + len))
+    RegionInfo region(0, 0, false, false, false);
+    while (region.end < (ptr + len))
     {
-        while (len > 0)
-        {
-            size_t tmp_len = std::min<size_t>(len, 0x1000);
-            ptr += tmp_len;
-            len -= tmp_len;
-            if (!_findRegion(ptr, &region) || !region.readable)
-                return false;
-        }
+        if (!_findRegion(ptr, &region) || !region.readable)
+            return false;
     }
 
     return true;
@@ -308,20 +302,13 @@ bool KittyPtrValidator::isPtrWritable(uintptr_t ptr, size_t len)
     if (ptr == 0)
         return false;
 
-    RegionInfo region(0, 0, false, false, false);
-    if (!_findRegion(ptr, &region) || !region.writable)
-        return false;
+    ptr = KittyUtils::untagHeepPtr(ptr);
 
-    if (region.end < (ptr + len))
+    RegionInfo region(0, 0, false, false, false);
+    while (region.end < (ptr + len))
     {
-        while (len > 0)
-        {
-            size_t tmp_len = std::min<size_t>(len, 0x1000);
-            ptr += tmp_len;
-            len -= tmp_len;
-            if (!_findRegion(ptr, &region) || !region.writable)
-                return false;
-        }
+        if (!_findRegion(ptr, &region) || !region.writable)
+            return false;
     }
 
     return true;
@@ -332,20 +319,13 @@ bool KittyPtrValidator::isPtrExecutable(uintptr_t ptr, size_t len)
     if (ptr == 0)
         return false;
 
-    RegionInfo region(0, 0, false, false, false);
-    if (!_findRegion(ptr, &region) || !region.executable)
-        return false;
+    ptr = KittyUtils::untagHeepPtr(ptr);
 
-    if (region.end < (ptr + len))
+    RegionInfo region(0, 0, false, false, false);
+    while (region.end < (ptr + len))
     {
-        while (len > 0)
-        {
-            size_t tmp_len = std::min<size_t>(len, 0x1000);
-            ptr += tmp_len;
-            len -= tmp_len;
-            if (!_findRegion(ptr, &region) || !region.executable)
-                return false;
-        }
+        if (!_findRegion(ptr, &region) || !region.executable)
+            return false;
     }
 
     return true;

@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <vector>
 
+#include "KittyUtils.hpp"
+
 #ifdef __APPLE__
 #include <mach/mach.h>
 
@@ -202,6 +204,7 @@ public:
     {
         if (ptr == 0)
             return false;
+        ptr = KittyUtils::untagHeepPtr(ptr);
         RegionInfo region(0, 0, false, false, false);
         return _findRegion(ptr, &region);
     }
