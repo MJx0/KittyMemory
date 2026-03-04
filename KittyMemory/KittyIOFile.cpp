@@ -1,5 +1,4 @@
 #include "KittyIOFile.hpp"
-#include "KittyUtils.hpp"
 
 bool KittyIOFile::Open()
 {
@@ -33,7 +32,7 @@ bool KittyIOFile::Close()
 
 ssize_t KittyIOFile::Read(void *buffer, size_t len)
 {
-    char *buf = (char *)KittyUtils::untagHeepPtr(buffer);
+    char *buf = (char *)buffer;
     size_t bytesRead = 0;
     do
     {
@@ -53,7 +52,7 @@ ssize_t KittyIOFile::Read(void *buffer, size_t len)
 
 ssize_t KittyIOFile::Write(const void *buffer, size_t len)
 {
-    const char *buf = (const char *)KittyUtils::untagHeepPtr(buffer);
+    const char *buf = (const char *)buffer;
     size_t bytesWritten = 0;
     do
     {
@@ -73,8 +72,7 @@ ssize_t KittyIOFile::Write(const void *buffer, size_t len)
 
 ssize_t KittyIOFile::Read(uintptr_t offset, void *buffer, size_t len)
 {
-    offset = KittyUtils::untagHeepPtr(offset);
-    char *buf = (char *)KittyUtils::untagHeepPtr(buffer);
+    char *buf = (char *)buffer;
     size_t bytesRead = 0;
     do
     {
@@ -98,8 +96,7 @@ ssize_t KittyIOFile::Read(uintptr_t offset, void *buffer, size_t len)
 
 ssize_t KittyIOFile::Write(uintptr_t offset, const void *buffer, size_t len)
 {
-    offset = KittyUtils::untagHeepPtr(offset);
-    const char *buf = (const char *)KittyUtils::untagHeepPtr(buffer);
+    const char *buf = (const char *)buffer;
     size_t bytesWritten = 0;
     do
     {
@@ -262,7 +259,7 @@ bool KittyIOFile::writeToFd(int fd)
     if (!readToBuffer(&buf) || buf.empty())
         return false;
 
-    char *ptr = (char *)KittyUtils::untagHeepPtr((void*)buf.data());
+    char *ptr = buf.data();
     ssize_t len = buf.size();
 
     do
