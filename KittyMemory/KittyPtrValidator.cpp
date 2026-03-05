@@ -287,11 +287,14 @@ bool KittyPtrValidator::isPtrReadable(uintptr_t ptr, size_t len)
 
     ptr = KittyUtils::untagHeepPtr(ptr);
 
+    uintptr_t end = ptr + len;
     RegionInfo region(0, 0, false, false, false);
-    while (region.end < (ptr + len))
+    while (region.end < end)
     {
         if (!_findRegion(ptr, &region) || !region.readable)
             return false;
+
+        ptr = region.end;
     }
 
     return true;
@@ -304,11 +307,14 @@ bool KittyPtrValidator::isPtrWritable(uintptr_t ptr, size_t len)
 
     ptr = KittyUtils::untagHeepPtr(ptr);
 
+    uintptr_t end = ptr + len;
     RegionInfo region(0, 0, false, false, false);
-    while (region.end < (ptr + len))
+    while (region.end < end)
     {
         if (!_findRegion(ptr, &region) || !region.writable)
             return false;
+        
+        ptr = region.end;
     }
 
     return true;
@@ -321,11 +327,14 @@ bool KittyPtrValidator::isPtrExecutable(uintptr_t ptr, size_t len)
 
     ptr = KittyUtils::untagHeepPtr(ptr);
 
+    uintptr_t end = ptr + len;
     RegionInfo region(0, 0, false, false, false);
-    while (region.end < (ptr + len))
+    while (region.end < end)
     {
         if (!_findRegion(ptr, &region) || !region.executable)
             return false;
+        
+        ptr = region.end;
     }
 
     return true;
