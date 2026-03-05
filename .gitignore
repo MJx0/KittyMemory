@@ -30,3 +30,9 @@ libs/
 
 # Logs
 *.log
+
+# Theos
+.theos/
+rootless/
+rootful/
+roothide/
