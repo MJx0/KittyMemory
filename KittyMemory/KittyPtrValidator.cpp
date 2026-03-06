@@ -282,7 +282,7 @@ void KittyPtrValidator::refreshRegionCache()
 
 bool KittyPtrValidator::isPtrReadable(uintptr_t ptr, size_t len)
 {
-    if (ptr == 0)
+    if (ptr == 0 || ptr + len < ptr)
         return false;
 
     ptr = KittyUtils::untagHeepPtr(ptr);
@@ -302,7 +302,7 @@ bool KittyPtrValidator::isPtrReadable(uintptr_t ptr, size_t len)
 
 bool KittyPtrValidator::isPtrWritable(uintptr_t ptr, size_t len)
 {
-    if (ptr == 0)
+    if (ptr == 0 || ptr + len < ptr)
         return false;
 
     ptr = KittyUtils::untagHeepPtr(ptr);
@@ -322,7 +322,7 @@ bool KittyPtrValidator::isPtrWritable(uintptr_t ptr, size_t len)
 
 bool KittyPtrValidator::isPtrExecutable(uintptr_t ptr, size_t len)
 {
-    if (ptr == 0)
+    if (ptr == 0 || ptr + len < ptr)
         return false;
 
     ptr = KittyUtils::untagHeepPtr(ptr);
