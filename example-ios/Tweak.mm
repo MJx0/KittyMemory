@@ -59,7 +59,7 @@ void test_thread()
     gPatches.get_canShoot = MemoryPatch::createWithAsm(unityBase + 0x10948D4, MP_ASM_ARM64, "mov x0, #1; ret");
     
     // format asm
-    std::string asm_fmt = KittyUtils::String::Fmt("mov x0, #%d; ret", 65536);
+    std::string asm_fmt = KittyUtils::String::fmt("mov x0, #%d; ret", 65536);
     gPatches.get_gold = MemoryPatch::createWithAsm(unityBase + 0xE4EB8, MP_ASM_ARM64, asm_fmt);
 #endif
     
@@ -147,12 +147,12 @@ void test_thread()
     KITTY_LOGI("================= HEX DUMP =================");
     
     // hex dump by default 8 rows with ASCII
-    KITTY_LOGI("%{public}s", KittyUtils::HexDump(g_BaseInfo.header, sizeof(*g_BaseInfo.header)).c_str());
+    KITTY_LOGI("%{public}s", KittyUtils::Data::hexDump(g_BaseInfo.header, sizeof(*g_BaseInfo.header)).c_str());
     
     KITTY_LOGI("============================================");
     
     // 16 rows, no ASCII
-    KITTY_LOGI("\n%{public}s", KittyUtils::HexDump<16, false>(g_BaseInfo.header, sizeof(*g_BaseInfo.header)).c_str());
+    KITTY_LOGI("\n%{public}s", KittyUtils::Data::hexDump<16, false>(g_BaseInfo.header, sizeof(*g_BaseInfo.header)).c_str());
 }
 
 __attribute__((constructor)) void init()

@@ -20,7 +20,7 @@ namespace KittyUtils
         if (ver > 0)
             return ver;
 
-        char buf[0xff] = {0};
+        char buf[0xff] = {};
         if (__system_property_get("ro.build.version.release", buf))
             ver = std::atoi(buf);
 
@@ -33,7 +33,7 @@ namespace KittyUtils
         if (sdk > 0)
             return sdk;
 
-        char buf[0xff] = {0};
+        char buf[0xff] = {};
         if (__system_property_get("ro.build.version.sdk", buf))
             sdk = std::atoi(buf);
 
@@ -41,7 +41,7 @@ namespace KittyUtils
     }
 #endif
 
-    std::string fileNameFromPath(const std::string &filePath)
+    std::string Path::fileName(const std::string &filePath)
     {
         std::string filename;
         const size_t last_slash_idx = filePath.find_last_of("/\\");
@@ -50,7 +50,7 @@ namespace KittyUtils
         return filename;
     }
 
-    std::string fileDirectory(const std::string &filePath)
+    std::string Path::fileDirectory(const std::string &filePath)
     {
         std::string directory;
         const size_t last_slash_idx = filePath.find_last_of("/\\");
@@ -59,7 +59,7 @@ namespace KittyUtils
         return directory;
     }
 
-    std::string fileExtension(const std::string &filePath)
+    std::string Path::fileExtension(const std::string &filePath)
     {
         std::string ext;
         const size_t last_slash_idx = filePath.find_last_of(".");
@@ -68,56 +68,124 @@ namespace KittyUtils
         return ext;
     }
 
-    void String::Trim(std::string &str)
+    void String::trim(std::string &str)
     {
-        // https://www.techiedelight.com/remove-whitespaces-string-cpp/
-        str.erase(std::remove_if(str.begin(), str.end(), [](char c)
-        { return (c == ' ' || c == '\n' || c == '\r' ||
-                  c == '\t' || c == '\v' || c == '\f'); }),
-                  str.end());
+        str.erase(std::remove_if(str.begin(), str.end(), ::isspace), str.end());
     }
 
-    bool String::ValidateHex(std::string &hex)
+    bool String::isValidHex(const std::string &hex)
     {
-        if (hex.empty()) return false;
+        if (hex.empty())
+            return false;
 
-        if (hex.compare(0, 2, "0x") == 0)
-            hex.erase(0, 2);
+        const char *data = hex.c_str();
+        size_t len = hex.length();
+        size_t i = 0;
 
-        Trim(hex);  // first remove spaces
-
-        if (hex.length() < 2 || hex.length() % 2 != 0) return false;
-
-        for (size_t i = 0; i < hex.length(); i++)
+        while (i < len && ::isspace(static_cast<unsigned char>(data[i])))
         {
-            if (!std::isxdigit((unsigned char)hex[i]))
+            i++;
+        }
+
+        if (i + 2 <= len && data[i] == '0' && (data[i + 1] == 'x' || data[i + 1] == 'X'))
+        {
+            i += 2;
+        }
+
+        size_t digitCount = 0;
+
+        for (; i < len; ++i)
+        {
+            unsigned char c = static_cast<unsigned char>(data[i]);
+
+            if (::isspace(c))
+            {
+                continue;
+            }
+
+            if (!::isxdigit(c))
+            {
                 return false;
+            }
+
+            digitCount++;
+        }
+
+        return (digitCount > 0 && (digitCount % 2 == 0));
+    }
+
+    bool String::validateHex(std::string &hex)
+    {
+        if (hex.empty())
+            return false;
+
+        size_t len = hex.length();
+        size_t startOffset = (len >= 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X')) ? 2 : 0;
+
+        size_t actualByteCount = 0;
+        bool needsCleaning = (startOffset > 0);
+
+        for (size_t i = startOffset; i < len; ++i)
+        {
+            unsigned char c = static_cast<unsigned char>(hex[i]);
+
+            if (::isspace(c))
+            {
+                needsCleaning = true;
+                continue;
+            }
+
+            if (!::isxdigit(c))
+                return false;
+
+            actualByteCount++;
+        }
+
+        if (actualByteCount == 0 || (actualByteCount % 2 != 0))
+            return false;
+
+        if (needsCleaning)
+        {
+            std::string cleaned;
+            cleaned.reserve(actualByteCount);
+            for (size_t i = startOffset; i < len; ++i)
+            {
+                unsigned char c = static_cast<unsigned char>(hex[i]);
+                if (!::isspace(c))
+                {
+                    cleaned.push_back(c);
+                }
+            }
+            hex = std::move(cleaned);
         }
 
         return true;
     }
 
-    std::string String::Fmt(const char *fmt, ...)
+    std::string String::fmt(const char *fmt, ...)
     {
         if (!fmt)
             return "";
 
         va_list args;
-
         va_start(args, fmt);
-        size_t size = vsnprintf(nullptr, 0, fmt, args) + 1;  // extra space for '\0'
+        int size = vsnprintf(nullptr, 0, fmt, args);
         va_end(args);
 
-        std::vector<char> buffer(size, '\0');
+        if (size <= 0)
+            return "";
+
+        std::string str;
+        str.resize(static_cast<size_t>(size));
 
         va_start(args, fmt);
-        vsnprintf(&buffer[0], size, fmt, args);
+        vsnprintf(&str[0], static_cast<size_t>(size) + 1, fmt, args);
         va_end(args);
 
-        return std::string(&buffer[0]);
+        return str;
     }
 
-    std::string String::Random(size_t length)
+    std::string String::random(size_t length)
     {
         static const std::string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
@@ -134,52 +202,50 @@ namespace KittyUtils
         return str;
     }
 
-    // https://tweex.net/post/c-anything-tofrom-a-hex-string/
-
-    /*
-        Convert a block of data to a hex string
-    */
-    std::string data2Hex(
-        const void *data,        //!< Data to convert
-        const size_t dataLength  //!< Length of the data to convert
-    )
+    bool Data::fromHex(std::string in, void *data)
     {
-        const auto *byteData = reinterpret_cast<const unsigned char *>(data);
-        std::stringstream hexStringStream;
+        if (in.empty() || !data || !String::validateHex(in))
+            return false;
 
-        hexStringStream << std::hex << std::setfill('0');
-        for (size_t index = 0; index < dataLength; ++index)
-            hexStringStream << std::setw(2) << static_cast<int>(byteData[index]);
-        return hexStringStream.str();
+        size_t length = in.length();
+        auto *byteData = reinterpret_cast<uint8_t *>(data);
+
+        auto charToNibble = [](char c) -> uint8_t {
+            if (c >= '0' && c <= '9')
+                return c - '0';
+            if (c >= 'a' && c <= 'f')
+                return c - 'a' + 10;
+            if (c >= 'A' && c <= 'F')
+                return c - 'A' + 10;
+            return 0;
+        };
+
+        for (size_t strIndex = 0, dataIndex = 0; strIndex < length; strIndex += 2, ++dataIndex)
+        {
+            byteData[dataIndex] = (charToNibble(in[strIndex]) << 4) | charToNibble(in[strIndex + 1]);
+        }
+
+        return true;
     }
 
-    /*
-        Convert a hex string to a block of data
-    */
-    void dataFromHex(
-        const std::string &in,  //!< Input hex string
-        void *data              //!< Data store
-    )
+    std::string Data::toHex(const void *data, const size_t dataLength)
     {
-        size_t length = in.length();
-        auto *byteData = reinterpret_cast<unsigned char *>(data);
+        if (!data || dataLength == 0)
+            return "";
 
-        std::stringstream hexStringStream;
-        hexStringStream >> std::hex;
-        for (size_t strIndex = 0, dataIndex = 0; strIndex < length; ++dataIndex)
+        static const char hexTable[] = "0123456789ABCDEF";
+        const auto *byteData = reinterpret_cast<const uint8_t *>(data);
+
+        std::string hexString;
+        hexString.resize(dataLength * 2);
+
+        for (size_t i = 0; i < dataLength; ++i)
         {
-            // Read out and convert the string two characters at a time
-            const char tmpStr[3] = {in[strIndex++], in[strIndex++], 0};
-
-            // Reset and fill the string stream
-            hexStringStream.clear();
-            hexStringStream.str(tmpStr);
-
-            // Do the conversion
-            int tmpValue = 0;
-            hexStringStream >> tmpValue;
-            byteData[dataIndex] = static_cast<unsigned char>(tmpValue);
+            hexString[i * 2] = hexTable[(byteData[i] >> 4) & 0x0F];
+            hexString[i * 2 + 1] = hexTable[byteData[i] & 0x0F];
         }
+
+        return hexString;
     }
 
 #ifdef __ANDROID__
@@ -193,7 +259,7 @@ namespace KittyUtils
     {
         namespace ElfHash
         {
-            uint32_t HashSymName(const char *name)
+            uint32_t hashSymName(const char *name)
             {
                 uint32_t h = 0, g;
                 for (; *name; name++)
@@ -207,7 +273,7 @@ namespace KittyUtils
                 return h;
             }
 
-            const KT_ElfW(Sym) * LookupByName(uintptr_t elfhash,
+            const KT_ElfW(Sym) * lookupByName(uintptr_t elfhash,
                                               uintptr_t symtab,
                                               uintptr_t strtab,
                                               size_t syment,
@@ -229,7 +295,7 @@ namespace KittyUtils
                 const uint32_t *bucket = elf_hash + 2;
                 const uint32_t *chain = bucket + num_bucket;
 
-                const uint32_t name_hash = HashSymName(symbol_name);
+                const uint32_t name_hash = hashSymName(symbol_name);
                 for (uint32_t i = bucket[name_hash % num_bucket]; i != 0 && i < num_chain; i = chain[i])
                 {
                     const auto *symbol = reinterpret_cast<const KT_ElfW(Sym) *>(symbol_table + (syment * i));
@@ -243,14 +309,14 @@ namespace KittyUtils
 
                 return nullptr;
             }
-        }  // namespace ElfHash
-    }  // namespace Elf
+        } // namespace ElfHash
+    } // namespace Elf
 
     namespace Elf
     {
         namespace GnuHash
         {
-            uint32_t HashSymName(const char *name)
+            uint32_t hashSymName(const char *name)
             {
                 uint32_t h = 5381;
                 for (; *name; name++)
@@ -258,7 +324,7 @@ namespace KittyUtils
                 return h;
             }
 
-            const KT_ElfW(Sym) * LookupByName(uintptr_t gnuhash,
+            const KT_ElfW(Sym) * lookupByName(uintptr_t gnuhash,
                                               uintptr_t symtab,
                                               uintptr_t strtab,
                                               size_t syment,
@@ -269,7 +335,7 @@ namespace KittyUtils
                 const auto *symbol_table = reinterpret_cast<const uint8_t *>(symtab);
                 const auto *string_table = reinterpret_cast<const char *>(strtab);
 
-                const uint32_t name_hash = HashSymName(symbol_name);
+                const uint32_t name_hash = hashSymName(symbol_name);
 
                 const uint32_t num_buckets = gnu_hash[0];
                 if (!num_buckets)
@@ -288,7 +354,8 @@ namespace KittyUtils
                 const uint32_t *chain = &buckets[num_buckets];
 
                 uintptr_t word = bloom[(name_hash / KT_ELFCLASS_BITS) % bloom_size];
-                uintptr_t mask = 0 | (uintptr_t)1 << (name_hash % KT_ELFCLASS_BITS) | (uintptr_t)1 << ((name_hash >> bloom_shift) % KT_ELFCLASS_BITS);
+                uintptr_t mask = 0 | (uintptr_t)1 << (name_hash % KT_ELFCLASS_BITS) |
+                                 (uintptr_t)1 << ((name_hash >> bloom_shift) % KT_ELFCLASS_BITS);
 
                 // If at least one bit is not set, a symbol is surely missing.
                 if ((word & mask) != mask)
@@ -322,8 +389,8 @@ namespace KittyUtils
 
                 return nullptr;
             }
-        }  // namespace GnuHash
-    }  // namespace Elf
+        } // namespace GnuHash
+    } // namespace Elf
 
     namespace Zip
     {
@@ -594,7 +661,7 @@ namespace KittyUtils
             return ents;
         }
 
-        bool GetEntryInfoByDataOffset(const std::string &zipPath, uint64_t dataOffset, ZipEntryInfo *out)
+        bool findEntryInfoByDataOffset(const std::string &zipPath, uint64_t dataOffset, ZipEntryInfo *out)
         {
             if (out)
                 *out = {};
@@ -614,13 +681,13 @@ namespace KittyUtils
             return false;
         }
 
-        bool MMapEntryByDataOffset(const std::string &zipPath, uint64_t dataOffset, ZipEntryMMap *out)
+        bool mmapEntryByDataOffset(const std::string &zipPath, uint64_t dataOffset, ZipEntryMMap *out)
         {
             if (out)
                 *out = {};
 
             ZipEntryInfo ent{};
-            if (!GetEntryInfoByDataOffset(zipPath, dataOffset, &ent))
+            if (!findEntryInfoByDataOffset(zipPath, dataOffset, &ent))
                 return false;
 
             uint64_t compressedSize = ent.compressedSize;
@@ -668,6 +735,6 @@ namespace KittyUtils
         }
     } // namespace Zip
 
-#endif  // __ANDROID__
+#endif // __ANDROID__
 
-}  // namespace KittyUtils
+} // namespace KittyUtils

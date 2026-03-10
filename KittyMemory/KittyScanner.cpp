@@ -13,7 +13,7 @@
 namespace KittyScanner
 {
 
-    bool compare(const char *data, const char *pattern, const char *mask)
+    bool compare(const uint8_t *data, const uint8_t *pattern, const char *mask)
     {
         for (; *mask; ++mask, ++data, ++pattern)
         {
@@ -23,30 +23,31 @@ namespace KittyScanner
         return !*mask;
     }
 
-    uintptr_t findInRange(const uintptr_t start, const uintptr_t end, const char *pattern, const std::string &mask)
+    uintptr_t findInRange(const uintptr_t start, const uintptr_t end, const uint8_t *pattern, const char *mask)
     {
-        const size_t scan_size = mask.length();
-
-        if (scan_size < 1 || ((start + scan_size) > end))
+        const size_t mask_len = strlen(mask);
+        if (mask_len == 0 || start >= end || (end - start) < mask_len)
             return 0;
 
-        const size_t length = end - start;
+        const uint8_t first_byte = pattern[0];
+        const uint8_t *scan_start = reinterpret_cast<const uint8_t *>(start);
+        const uint8_t *scan_end = reinterpret_cast<const uint8_t *>(end - mask_len);
 
-        for (size_t i = 0; i < length; ++i)
+        for (const uint8_t *cur = scan_start; cur <= scan_end; ++cur)
         {
-            const uintptr_t current_end = start + i + scan_size;
-            if (current_end > end)
+            cur = static_cast<const uint8_t *>(memchr(cur, first_byte, (scan_end - cur) + 1));
+            if (!cur)
                 break;
 
-            if (!compare(reinterpret_cast<const char *>(start + i), pattern, mask.c_str()))
-                continue;
-
-            return start + i;
+            if (compare(cur, pattern, mask))
+                return reinterpret_cast<uintptr_t>(cur);
         }
         return 0;
     }
 
-    std::vector<uintptr_t> findBytesAll(const uintptr_t start, const uintptr_t end, const char *bytes,
+    std::vector<uintptr_t> findBytesAll(const uintptr_t start,
+                                        const uintptr_t end,
+                                        const char *bytes,
                                         const std::string &mask)
     {
         std::vector<uintptr_t> list;
@@ -55,17 +56,17 @@ namespace KittyScanner
             return list;
 
         uintptr_t curr_search_address = start;
-        const size_t scan_size = mask.length();
         do
         {
-            if (!list.empty())
-                curr_search_address = list.back() + scan_size;
-
-            uintptr_t found = findInRange(curr_search_address, end, bytes, mask);
+            uintptr_t found = findInRange(curr_search_address,
+                                          end,
+                                          reinterpret_cast<const uint8_t *>(bytes),
+                                          mask.data());
             if (!found)
                 break;
 
             list.push_back(found);
+            curr_search_address = found + 1;
         } while (true);
 
         return list;
@@ -76,15 +77,17 @@ namespace KittyScanner
         if (start >= end || !bytes || mask.empty())
             return 0;
 
-        return findInRange(start, end, bytes, mask);
+        return findInRange(start, end, reinterpret_cast<const uint8_t *>(bytes), mask.data());
     }
 
-    std::vector<uintptr_t> findHexAll(const uintptr_t start, const uintptr_t end, std::string hex,
+    std::vector<uintptr_t> findHexAll(const uintptr_t start,
+                                      const uintptr_t end,
+                                      std::string hex,
                                       const std::string &mask)
     {
         std::vector<uintptr_t> list;
 
-        if (start >= end || mask.empty() || !KittyUtils::String::ValidateHex(hex))
+        if (start >= end || mask.empty() || !KittyUtils::String::validateHex(hex))
             return list;
 
         const size_t scan_size = mask.length();
@@ -92,15 +95,15 @@ namespace KittyScanner
             return list;
 
         std::vector<char> pattern(scan_size);
-        KittyUtils::dataFromHex(hex, &pattern[0]);
+        KittyUtils::Data::fromHex(hex, &pattern[0]);
 
-        list = findBytesAll(start, end, pattern.data(), mask);
+        list = findBytesAll(start, end, pattern.data(), mask.data());
         return list;
     }
 
     uintptr_t findHexFirst(const uintptr_t start, const uintptr_t end, std::string hex, const std::string &mask)
     {
-        if (start >= end || mask.empty() || !KittyUtils::String::ValidateHex(hex))
+        if (start >= end || mask.empty() || !KittyUtils::String::validateHex(hex))
             return 0;
 
         const size_t scan_size = mask.length();
@@ -108,7 +111,7 @@ namespace KittyScanner
             return 0;
 
         std::vector<char> pattern(scan_size);
-        KittyUtils::dataFromHex(hex, &pattern[0]);
+        KittyUtils::Data::fromHex(hex, &pattern[0]);
 
         return findBytesFirst(start, end, pattern.data(), mask);
     }
@@ -288,7 +291,9 @@ namespace KittyScanner
 
         if (!KittyMemory::getAddressMap(_elfBase + _ehdr.e_phoff, maps).readable)
         {
-            KITTY_LOGD("ElfScanner: Invalid phdr (%p + %p) = %p.", (void *)_elfBase, (void *)_ehdr.e_phoff,
+            KITTY_LOGD("ElfScanner: Invalid phdr (%p + %p) = %p.",
+                       (void *)_elfBase,
+                       (void *)_ehdr.e_phoff,
                        (void *)(_elfBase + _ehdr.e_phoff));
             return;
         }
@@ -450,7 +455,7 @@ namespace KittyScanner
         if (!elfBaseMap.pathname.empty() && elfBaseMap.offset != 0)
         {
             KittyUtils::Zip::ZipEntryInfo ent{};
-            if (KittyUtils::Zip::GetEntryInfoByDataOffset(elfBaseMap.pathname, elfBaseMap.offset, &ent) &&
+            if (KittyUtils::Zip::findEntryInfoByDataOffset(elfBaseMap.pathname, elfBaseMap.offset, &ent) &&
                 !ent.fileName.empty())
             {
                 _realpath += '!';
@@ -489,16 +494,22 @@ namespace KittyScanner
         _filepath = soinfo.path;
         _realpath = soinfo.realpath;
 
-        bool isLinker = KittyUtils::String::EndsWith(soinfo.path, "/linker") ||
-                        KittyUtils::String::EndsWith(soinfo.path, "/linker64");
+        bool isLinker = KittyUtils::String::endsWith(soinfo.path, "/linker") ||
+                        KittyUtils::String::endsWith(soinfo.path, "/linker64");
         if (!isLinker && (_elfBase == 0 || _loadSize == 0 || _loadBias == 0 || _phdr == 0 || _dynamic == 0 ||
                           _stringTable == 0 || _symbolTable == 0))
         {
             KITTY_LOGD("ElfScanner: Invalid soinfo!");
             KITTY_LOGD("ElfScanner: elfBase: %p | bias: %p | phdr: %p | dyn: %p | strtab=%p | symtab=%p | strsz=%p | "
                        "syment=%p",
-                       (void *)_elfBase, (void *)_loadBias, (void *)_phdr, (void *)_dynamic, (void *)_stringTable,
-                       (void *)_symbolTable, (void *)_strsz, (void *)_syment);
+                       (void *)_elfBase,
+                       (void *)_loadBias,
+                       (void *)_phdr,
+                       (void *)_dynamic,
+                       (void *)_stringTable,
+                       (void *)_symbolTable,
+                       (void *)_strsz,
+                       (void *)_syment);
             *this = ElfScanner();
             return;
         }
@@ -762,8 +773,12 @@ namespace KittyScanner
             // try gnu hash first
             if (_gnuHashTable)
             {
-                const auto *sym = KittyUtils::Elf::GnuHash::LookupByName(_gnuHashTable, _symbolTable, _stringTable,
-                                                                         _syment, _strsz, symbolName.c_str());
+                const auto *sym = KittyUtils::Elf::GnuHash::lookupByName(_gnuHashTable,
+                                                                         _symbolTable,
+                                                                         _stringTable,
+                                                                         _syment,
+                                                                         _strsz,
+                                                                         symbolName.c_str());
                 if (sym && sym->st_value)
                 {
                     return get_sym_address(sym);
@@ -772,8 +787,12 @@ namespace KittyScanner
 
             if (_elfHashTable)
             {
-                const auto *sym = KittyUtils::Elf::ElfHash::LookupByName(_elfHashTable, _symbolTable, _stringTable,
-                                                                         _syment, _strsz, symbolName.c_str());
+                const auto *sym = KittyUtils::Elf::ElfHash::lookupByName(_elfHashTable,
+                                                                         _symbolTable,
+                                                                         _stringTable,
+                                                                         _syment,
+                                                                         _strsz,
+                                                                         symbolName.c_str());
                 if (sym && sym->st_value)
                 {
                     return get_sym_address(sym);
@@ -798,34 +817,29 @@ namespace KittyScanner
             auto baseSeg = baseSegment();
             if (baseSeg.offset != 0)
             {
-                if (!KittyUtils::Zip::MMapEntryByDataOffset(_filepath, _baseSegment.offset, &mmap_info))
+                if (!KittyUtils::Zip::mmapEntryByDataOffset(_filepath, _baseSegment.offset, &mmap_info))
                     return _dsymbolsMap;
             }
             else
             {
-                errno = 0;
-                int fd = KT_EINTR_RETRY(open(_filepath.c_str(), O_RDONLY));
-                if (fd < 0)
+                KittyIOFile elfFile(_filepath, O_RDONLY);
+                if (!elfFile.open())
                 {
-                    KITTY_LOGD("Failed to open file <%s> err(%d)", _filepath.c_str(), errno);
+                    KITTY_LOGD("Failed to open file <%s> err(%s)", _filepath.c_str(), elfFile.lastStrError().c_str());
                     return _dsymbolsMap;
                 }
-
-                struct stat flstats;
-                memset(&flstats, 0, sizeof(struct stat));
-                int fstat_ret = fstat(fd, &flstats);
-                size_t elfSize = flstats.st_size;
-                if (fstat_ret == -1 || elfSize <= 0)
+                size_t elfSize = elfFile.info().st_size;
+                if (elfSize <= 0)
                 {
-                    close(fd);
+                    elfFile.close();
                     KITTY_LOGD("stat failed for <%s>", _filepath.c_str());
                     return _dsymbolsMap;
                 }
-                mmap_info.mappingBase = mmap(nullptr, elfSize, PROT_READ, MAP_PRIVATE, fd, 0);
+                mmap_info.mappingBase = mmap(nullptr, elfSize, PROT_READ, MAP_PRIVATE, elfFile.fd(), 0);
                 mmap_info.mappingSize = elfSize;
                 mmap_info.data = reinterpret_cast<uint8_t *>(mmap_info.mappingBase);
                 mmap_info.size = mmap_info.mappingSize;
-                close(fd);
+                elfFile.close();
             }
 
             if (mmap_info.size == 0 || !mmap_info.data || mmap_info.data == ((void *)-1))
@@ -929,7 +943,9 @@ namespace KittyScanner
         {
             if (it.readable && it.inode != 0)
             {
-                uintptr_t string_loc = KittyScanner::findDataFirst(it.startAddress, it.endAddress, name.data(),
+                uintptr_t string_loc = KittyScanner::findDataFirst(it.startAddress,
+                                                                   it.endAddress,
+                                                                   name.data(),
                                                                    name.length());
                 if (string_loc != 0)
                     string_locs.push_back(string_loc);
@@ -950,7 +966,9 @@ namespace KittyScanner
             {
                 for (auto &string_loc : string_locs)
                 {
-                    uintptr_t string_xref = KittyScanner::findDataFirst(it.startAddress, it.endAddress, &string_loc,
+                    uintptr_t string_xref = KittyScanner::findDataFirst(it.startAddress,
+                                                                        it.endAddress,
+                                                                        &string_loc,
                                                                         sizeof(uintptr_t));
                     if (!string_xref)
                         continue;
@@ -985,10 +1003,10 @@ namespace KittyScanner
         if (dumped && _fixedBySoInfo)
         {
             KittyIOFile destIO(destination, O_WRONLY);
-            destIO.Open();
+            destIO.open();
             KT_ElfW(Ehdr) fixedHdr = header();
-            destIO.Write(0, &fixedHdr, sizeof(fixedHdr));
-            destIO.Close();
+            destIO.pwrite(0, &fixedHdr, sizeof(fixedHdr));
+            destIO.close();
         }
         return dumped;
     }
@@ -1067,10 +1085,10 @@ namespace KittyScanner
         for (const auto &it : maps)
         {
 #ifdef __LP64__
-            if (it.startAddress >= (0x7fffffffffff-0x1000))
+            if (it.startAddress >= (0x7fffffffffff - 0x1000))
                 continue;
 #else
-            if (it.startAddress >= (0xffffffff-0x1000))
+            if (it.startAddress >= (0xffffffff - 0x1000))
                 continue;
 #endif
 
@@ -1080,16 +1098,16 @@ namespace KittyScanner
 
             if (isAppFilter)
             {
-                if (it.inode == 0 || (!KittyUtils::String::StartsWith(it.pathname, "/data/") &&
-                                      !KittyUtils::String::StartsWith(it.pathname, "/proc/") &&
-                                      !KittyUtils::String::StartsWith(it.pathname, "/memfd:")))
+                if (it.inode == 0 || (!KittyUtils::String::startsWith(it.pathname, "/data/") &&
+                                      !KittyUtils::String::startsWith(it.pathname, "/proc/") &&
+                                      !KittyUtils::String::startsWith(it.pathname, "/memfd:")))
                     continue;
             }
             else if (isSysFilter)
             {
                 if ((it.inode == 0 && it.pathname != "[vdso]") ||
-                    (!KittyUtils::String::StartsWith(it.pathname, "/system/") &&
-                     !KittyUtils::String::StartsWith(it.pathname, "/apex/")))
+                    (!KittyUtils::String::startsWith(it.pathname, "/system/") &&
+                     !KittyUtils::String::startsWith(it.pathname, "/apex/")))
                     continue;
             }
 
@@ -1112,33 +1130,33 @@ namespace KittyScanner
             }
 
             bool isFile = (!it.pathname.empty() && it.inode != 0);
-            if (!isFile && it.pathname != "[vdso]" && !KittyUtils::String::StartsWith(it.pathname, "/memfd:"))
+            if (!isFile && it.pathname != "[vdso]" && !KittyUtils::String::startsWith(it.pathname, "/memfd:"))
                 continue;
 
             if (it.pathname == "cfi shadow")
                 continue;
 
-            if (KittyUtils::String::StartsWith(it.pathname, "/dev/") ||
-                KittyUtils::String::StartsWith(it.pathname, "/system/fonts/") ||
-                KittyUtils::String::StartsWith(it.pathname, "/data/priv-downloads/") ||
-                KittyUtils::String::StartsWith(it.pathname, "/data/misc/"))
+            if (KittyUtils::String::startsWith(it.pathname, "/dev/") ||
+                KittyUtils::String::startsWith(it.pathname, "/system/fonts/") ||
+                KittyUtils::String::startsWith(it.pathname, "/data/priv-downloads/") ||
+                KittyUtils::String::startsWith(it.pathname, "/data/misc/"))
                 continue;
 
-            if (KittyUtils::String::StartsWith(it.pathname, "/system/etc/") &&
-                !KittyUtils::String::EndsWith(it.pathname, ".so"))
+            if (KittyUtils::String::startsWith(it.pathname, "/system/etc/") &&
+                !KittyUtils::String::endsWith(it.pathname, ".so"))
                 continue;
 
-            if (KittyUtils::String::StartsWith(it.pathname, "/data/dalvik-cache/") ||
-                KittyUtils::String::StartsWith(it.pathname, "/system/") ||
-                KittyUtils::String::StartsWith(it.pathname, "/apex/com.android.") ||
-                (KittyUtils::String::StartsWith(it.pathname, "/data/app/") &&
-                 KittyUtils::String::Contains(it.pathname, "/oat/")))
+            if (KittyUtils::String::startsWith(it.pathname, "/data/dalvik-cache/") ||
+                KittyUtils::String::startsWith(it.pathname, "/system/") ||
+                KittyUtils::String::startsWith(it.pathname, "/apex/com.android.") ||
+                (KittyUtils::String::startsWith(it.pathname, "/data/app/") &&
+                 KittyUtils::String::contains(it.pathname, "/oat/")))
             {
-                if (KittyUtils::String::EndsWith(it.pathname, ".jar") ||
-                    KittyUtils::String::EndsWith(it.pathname, ".art") ||
-                    KittyUtils::String::EndsWith(it.pathname, ".oat") ||
-                    KittyUtils::String::EndsWith(it.pathname, ".odex") ||
-                    KittyUtils::String::EndsWith(it.pathname, ".dex"))
+                if (KittyUtils::String::endsWith(it.pathname, ".jar") ||
+                    KittyUtils::String::endsWith(it.pathname, ".art") ||
+                    KittyUtils::String::endsWith(it.pathname, ".oat") ||
+                    KittyUtils::String::endsWith(it.pathname, ".odex") ||
+                    KittyUtils::String::endsWith(it.pathname, ".dex"))
                     continue;
             }
 
@@ -1170,7 +1188,7 @@ namespace KittyScanner
         const auto allElfs = ElfScanner::getAllELFs(type, filter);
         for (const auto &it : allElfs)
         {
-            if (it.isValid() && KittyUtils::String::EndsWith(it.realPath(), path))
+            if (it.isValid() && KittyUtils::String::endsWith(it.realPath(), path))
             {
                 if (it.dynamic() && it.dynamics().size() > 0)
                     dyn_elfs.push_back(it);
@@ -1191,7 +1209,8 @@ namespace KittyScanner
             for (auto &it : dyn_elfs)
             {
                 int numSegments = it.segments().size();
-                if (numSegments > nMostSegments)
+                // >= to get latest
+                if (numSegments >= nMostSegments)
                 {
                     ret = it;
                     nMostSegments = numSegments;
@@ -1207,7 +1226,8 @@ namespace KittyScanner
             for (auto &it : elfs)
             {
                 int numSegments = it.segments().size();
-                if (numSegments > nMostSegments)
+                // >= to get latest
+                if (numSegments >= nMostSegments)
                 {
                     ret = it;
                     nMostSegments = numSegments;
@@ -1219,7 +1239,8 @@ namespace KittyScanner
     }
 
     std::vector<std::pair<uintptr_t, ElfScanner>> ElfScanner::findSymbolAll(const std::string &symbolName,
-                                                                            EScanElfType type, EScanElfFilter filter)
+                                                                            EScanElfType type,
+                                                                            EScanElfFilter filter)
     {
         std::vector<std::pair<uintptr_t, ElfScanner>> ret{};
 
@@ -1270,19 +1291,19 @@ namespace KittyScanner
 
         for (const auto &sym : dsymbols())
         {
-            if (KittyUtils::String::StartsWith(sym.first, "__dl__ZL11solist_head") ||
-                KittyUtils::String::StartsWith(sym.first, "__dl__ZL6solist"))
+            if (KittyUtils::String::startsWith(sym.first, "__dl__ZL11solist_head") ||
+                KittyUtils::String::startsWith(sym.first, "__dl__ZL6solist"))
             {
                 _linker_syms.solist = sym.second;
                 continue;
             }
-            if (KittyUtils::String::StartsWith(sym.first, "__dl__ZL6somain"))
+            if (KittyUtils::String::startsWith(sym.first, "__dl__ZL6somain"))
             {
                 _linker_syms.somain = sym.second;
                 continue;
             }
-            if (KittyUtils::String::StartsWith(sym.first, "__dl__ZL11solist_tail") ||
-                KittyUtils::String::StartsWith(sym.first, "__dl__ZL6sonext"))
+            if (KittyUtils::String::startsWith(sym.first, "__dl__ZL11solist_tail") ||
+                KittyUtils::String::startsWith(sym.first, "__dl__ZL6sonext"))
             {
                 _linker_syms.sonext = sym.second;
                 continue;
@@ -1392,9 +1413,13 @@ namespace KittyScanner
         }
 
         KITTY_LOGD("soinfo_bias(%zx) | soinfo_size(%zx)", _soinfo_offsets.bias, _soinfo_offsets.size);
-        KITTY_LOGD("soinfo_phdr(%zx, %zx) | soinfo_dyn(%zx)", _soinfo_offsets.phdr, _soinfo_offsets.phnum,
+        KITTY_LOGD("soinfo_phdr(%zx, %zx) | soinfo_dyn(%zx)",
+                   _soinfo_offsets.phdr,
+                   _soinfo_offsets.phnum,
                    _soinfo_offsets.dyn);
-        KITTY_LOGD("soinfo_strtab(%zx, %zx) | soinfo_symtab(%zx)", _soinfo_offsets.strtab, _soinfo_offsets.strsz,
+        KITTY_LOGD("soinfo_strtab(%zx, %zx) | soinfo_symtab(%zx)",
+                   _soinfo_offsets.strtab,
+                   _soinfo_offsets.strsz,
                    _soinfo_offsets.symtab);
 
         if (!(_soinfo_offsets.size && _soinfo_offsets.bias && _soinfo_offsets.dyn && _soinfo_offsets.symtab &&
@@ -1466,7 +1491,7 @@ namespace KittyScanner
         const auto list = allSoInfo();
         for (const auto &it : list)
         {
-            if (KittyUtils::String::EndsWith(it.realpath, name))
+            if (KittyUtils::String::endsWith(it.realpath, name))
             {
                 return it;
             }
@@ -1516,7 +1541,7 @@ namespace KittyScanner
             if (si_map.offset != 0)
             {
                 KittyUtils::Zip::ZipEntryInfo ent{};
-                if (KittyUtils::Zip::GetEntryInfoByDataOffset(si_map.pathname, si_map.offset, &ent) &&
+                if (KittyUtils::Zip::findEntryInfoByDataOffset(si_map.pathname, si_map.offset, &ent) &&
                     !ent.fileName.empty())
                 {
                     info.realpath += '!';
@@ -1572,7 +1597,8 @@ namespace KittyScanner
             return false;
         }
 
-        KITTY_LOGD("NativeBridgeScanner: Using nativebridge version (%d), data size (%p)", _nbItf_data.version,
+        KITTY_LOGD("NativeBridgeScanner: Using nativebridge version (%d), data size (%p)",
+                   _nbItf_data.version,
                    (void *)_nbItf_data_size);
 
         memcpy(&_nbItf_data, (const void *)(_nbItf), _nbItf_data_size);
@@ -1609,7 +1635,7 @@ namespace KittyScanner
         } data;
 
         data.phdr = _sodlElf.phdr();
-        data.phnum = _sodlElf.programHeaders().size();
+        data.phnum = _sodlElf.header().e_phnum;
 
         KITTY_LOGD("NativeBridgeScanner: sodl phdr { %p, %zu }", (void *)(data.phdr), data.phnum);
 
@@ -1621,7 +1647,8 @@ namespace KittyScanner
             _sodl = findDataFirst(it.startAddress, it.endAddress, &data, sizeof(data));
             if (_sodl)
             {
-                KITTY_LOGD("NativeBridgeScanner: Found sodl->phdr ref (%p) at %s", (void *)_sodl,
+                KITTY_LOGD("NativeBridgeScanner: Found sodl->phdr ref (%p) at %s",
+                           (void *)_sodl,
                            it.toString().c_str());
                 break;
             }
@@ -1635,13 +1662,14 @@ namespace KittyScanner
                 if (!it.is_private || !it.is_ro || it.inode != 0)
                     continue;
 
-                if (!KittyUtils::String::StartsWith(it.pathname, "[anon:Mem_") && it.pathname != "[anon:linker_alloc]")
+                if (!KittyUtils::String::startsWith(it.pathname, "[anon:Mem_") && it.pathname != "[anon:linker_alloc]")
                     continue;
 
                 _sodl = findDataFirst(it.startAddress, it.endAddress, &data, sizeof(data));
                 if (_sodl)
                 {
-                    KITTY_LOGD("NativeBridgeScanner: Found sodl->phdr ref (%p) at %s", (void *)_sodl,
+                    KITTY_LOGD("NativeBridgeScanner: Found sodl->phdr ref (%p) at %s",
+                               (void *)_sodl,
                                it.toString().c_str());
                     break;
                 }
@@ -1757,11 +1785,17 @@ namespace KittyScanner
             }
         }
 
-        KITTY_LOGD("nb_soinfo_base(%zx) | nb_soinfo_size(%zx) | nb_soinfo_bias(%zx)", _soinfo_offsets.base,
-                   _soinfo_offsets.size, _soinfo_offsets.bias);
-        KITTY_LOGD("nb_soinfo_phdr(%zx, %zx) | nb_soinfo_dyn(%zx)", _soinfo_offsets.phdr, _soinfo_offsets.phnum,
+        KITTY_LOGD("nb_soinfo_base(%zx) | nb_soinfo_size(%zx) | nb_soinfo_bias(%zx)",
+                   _soinfo_offsets.base,
+                   _soinfo_offsets.size,
+                   _soinfo_offsets.bias);
+        KITTY_LOGD("nb_soinfo_phdr(%zx, %zx) | nb_soinfo_dyn(%zx)",
+                   _soinfo_offsets.phdr,
+                   _soinfo_offsets.phnum,
                    _soinfo_offsets.dyn);
-        KITTY_LOGD("nb_soinfo_strtab(%zx, %zx) | nb_soinfo_symtab(%zx)", _soinfo_offsets.strtab, _soinfo_offsets.strsz,
+        KITTY_LOGD("nb_soinfo_strtab(%zx, %zx) | nb_soinfo_symtab(%zx)",
+                   _soinfo_offsets.strtab,
+                   _soinfo_offsets.strsz,
                    _soinfo_offsets.symtab);
 
         KITTY_LOGD("nb_soinfo_next(%zx)", _soinfo_offsets.next);
@@ -1800,7 +1834,7 @@ namespace KittyScanner
         const auto list = allSoInfo();
         for (const auto &it : list)
         {
-            if (KittyUtils::String::EndsWith(it.realpath, name))
+            if (KittyUtils::String::endsWith(it.realpath, name))
             {
                 ret = it;
                 break;
@@ -1852,7 +1886,7 @@ namespace KittyScanner
             if (si_map.offset != 0)
             {
                 KittyUtils::Zip::ZipEntryInfo ent{};
-                if (KittyUtils::Zip::GetEntryInfoByDataOffset(si_map.pathname, si_map.offset, &ent) &&
+                if (KittyUtils::Zip::findEntryInfoByDataOffset(si_map.pathname, si_map.offset, &ent) &&
                     !ent.fileName.empty())
                 {
                     info.realpath += '!';

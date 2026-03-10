@@ -123,16 +123,21 @@ void test_thread()
         nativeInjectEvent = unityELF.findRegisterNativeFn("nativeInjectEvent", "(Landroid/view/InputEvent;I)Z");
 
     if (nativeInjectEvent.isValid())
-        KITTY_LOGI("nativeInjectEvent = { %s, %s, %p }", nativeInjectEvent.name, nativeInjectEvent.signature,
+        KITTY_LOGI("nativeInjectEvent = { %s, %s, %p }",
+                   nativeInjectEvent.name,
+                   nativeInjectEvent.signature,
                    nativeInjectEvent.fnPtr);
     else
         KITTY_LOGI("nativeInjectEvent = NULL");
 
-    RegisterNativeFn nativeUnitySendMessage = unityELF.findRegisterNativeFn(
-        "nativeUnitySendMessage", "(Ljava/lang/String;Ljava/lang/String;[B)V");
+    RegisterNativeFn nativeUnitySendMessage = unityELF
+                                                  .findRegisterNativeFn("nativeUnitySendMessage",
+                                                                        "(Ljava/lang/String;Ljava/lang/String;[B)V");
     if (nativeUnitySendMessage.isValid())
-        KITTY_LOGI("nativeUnitySendMessage = { %s, %s, %p }", nativeUnitySendMessage.name,
-                   nativeUnitySendMessage.signature, nativeUnitySendMessage.fnPtr);
+        KITTY_LOGI("nativeUnitySendMessage = { %s, %s, %p }",
+                   nativeUnitySendMessage.name,
+                   nativeUnitySendMessage.signature,
+                   nativeUnitySendMessage.fnPtr);
     else
         KITTY_LOGI("nativeUnitySendMessage = NULL");
 
@@ -155,7 +160,7 @@ void test_thread()
     gPatches.get_canShoot = MemoryPatch::createWithAsm(il2cppBase + 0x1D8B054, MP_ASM_ARM64, "mov x0, #1; ret");
 
     // format asm
-    auto asm_fmt = KittyUtils::String::Fmt("mov x0, #%d; ret", 65536);
+    auto asm_fmt = KittyUtils::String::fmt("mov x0, #%d; ret", 65536);
     gPatches.get_gold = MemoryPatch::createWithAsm(il2cppBase + 0x1D8B054, MP_ASM_ARM64, asm_fmt);
 #endif
 
@@ -188,11 +193,15 @@ void test_thread()
     uintptr_t search_end = g_il2cppElf.baseSegment().endAddress;
 
     // scan with direct bytes & get one result
-    found_at = KittyScanner::findBytesFirst(search_start, search_end, "\x33\x44\x55\x66\x00\x77\x88\x00\x99",
+    found_at = KittyScanner::findBytesFirst(search_start,
+                                            search_end,
+                                            "\x33\x44\x55\x66\x00\x77\x88\x00\x99",
                                             "xxxx??x?x");
     KITTY_LOGI("found bytes at: %p", (void *)found_at);
     // scan with direct bytes & get all results
-    found_at_list = KittyScanner::findBytesAll(search_start, search_end, "\x33\x44\x55\x66\x00\x77\x88\x00\x99",
+    found_at_list = KittyScanner::findBytesAll(search_start,
+                                               search_end,
+                                               "\x33\x44\x55\x66\x00\x77\x88\x00\x99",
                                                "xxxx??x?x");
     KITTY_LOGI("found bytes results: %zu", found_at_list.size());
 
@@ -222,12 +231,12 @@ void test_thread()
     KITTY_LOGI("====================== HEX DUMP =====================");
 
     // hex dump by default 8 rows with ASCII
-    KITTY_LOGI("\n%s", KittyUtils::HexDump((void *)g_il2cppElf.baseSegment().startAddress, 100).c_str());
+    KITTY_LOGI("\n%s", KittyUtils::Data::hexDump((void *)g_il2cppElf.baseSegment().startAddress, 100).c_str());
 
     KITTY_LOGI("=====================================================");
 
     // 16 rows, no ASCII
-    KITTY_LOGI("\n%s", KittyUtils::HexDump<16, false>((void *)g_il2cppElf.baseSegment().startAddress, 100).c_str());
+    KITTY_LOGI("\n%s", KittyUtils::Data::hexDump<16, false>((void *)g_il2cppElf.baseSegment().startAddress, 100).c_str());
 
     KITTY_LOGI("===================== ELFS SCAN ====================");
 
@@ -277,12 +286,15 @@ void test_thread()
 #endif
 }
 
+#if 1
 __attribute__((constructor)) void init()
 {
     std::thread(test_thread).detach();
 }
 
-/*#include <jni.h>
+#else
+
+#include <jni.h>
 
 extern "C" jint JNIEXPORT JNI_OnLoad(JavaVM *vm, void *key)
 {
@@ -305,4 +317,6 @@ extern "C" jint JNIEXPORT JNI_OnLoad(JavaVM *vm, void *key)
     std::thread(test_thread).detach();
 
     return JNI_VERSION_1_6;
-}*/
+}
+
+#endif
