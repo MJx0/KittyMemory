@@ -13,4 +13,5 @@ Check [Android example](example-android/README.md) & [iOS example](example-ios/R
 ## Documentation
 
 [![Android API Docs](https://img.shields.io/badge/Android-Doxygen-green?style=for-the-badge&logo=android)](https://MJx0.github.io/KittyMemory/android/index.html)
+
 [![iOS API Docs](https://img.shields.io/badge/iOS-Doxygen-blue?style=for-the-badge&logo=apple)](https://MJx0.github.io/KittyMemory/ios/index.html)
