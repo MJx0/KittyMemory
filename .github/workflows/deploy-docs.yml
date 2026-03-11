@@ -1,0 +1,60 @@
+name: Deploy Doxygen to Pages
+
+on:
+  push:
+    branches: ["master"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Build Android Docs
+        run: |
+          cd docs
+          doxygen Doxyfile.android
+
+      - name: Build iOS Docs
+        run: |
+          cd docs
+          doxygen Doxyfile.ios
+
+      - name: Create Landing Page
+        run: |
+          cat <<EOF > docs/index.html
+          <!DOCTYPE html>
+          <html>
+          <head><title>Project Documentation</title></head>
+          <body style="font-family: sans-serif; padding: 40px;">
+            <h1>API Reference</h1>
+            <hr>
+            <ul>
+              <li><a href="android/index.html" style="font-size: 1.2rem;">Android Documentation</a></li>
+              <li><a href="linux/index.html" style="font-size: 1.2rem;">Linux Documentation</a></li>
+            </ul>
+            <p><small>Last updated: $(date)</small></p>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './docs'
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
