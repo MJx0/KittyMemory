@@ -23,7 +23,7 @@
 /**
  * @brief Returns the memory page size.
  */
-static inline size_t KTGetPageSize()
+inline size_t KTGetPageSize()
 {
     static size_t pageSize = 0;
     if (pageSize == 0)
@@ -204,7 +204,7 @@ namespace KittyUtils
         /**
          * @brief Helper to compare two characters case-insensitively.
          */
-        static inline bool charEqualsIgnoreCase(char a, char b)
+        inline bool charEqualsIgnoreCase(char a, char b)
         {
             return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
         }
@@ -218,16 +218,7 @@ namespace KittyUtils
          *
          * @return true if str starts with prefix, false otherwise.
          */
-        static inline bool startsWith(const std::string &str, const std::string &prefix, bool sensitive = true)
-        {
-            if (str.length() < prefix.length())
-                return false;
-            if (sensitive)
-            {
-                return str.compare(0, prefix.length(), prefix) == 0;
-            }
-            return std::equal(prefix.begin(), prefix.end(), str.begin(), charEqualsIgnoreCase);
-        }
+        bool startsWith(const std::string &str, const std::string &prefix, bool sensitive = true);
 
         /**
          * @brief Checks if a string contains a given substring.
@@ -238,17 +229,7 @@ namespace KittyUtils
          *
          * @return true if str contains substring, false otherwise.
          */
-        static inline bool contains(const std::string &str, const std::string &substring, bool sensitive = true)
-        {
-            if (str.length() < substring.length())
-                return false;
-            if (sensitive)
-            {
-                return str.find(substring) != std::string::npos;
-            }
-            auto it = std::search(str.begin(), str.end(), substring.begin(), substring.end(), charEqualsIgnoreCase);
-            return it != str.end();
-        }
+        bool contains(const std::string &str, const std::string &substring, bool sensitive = true);
 
         /**
          * @brief Checks if a string ends with a given suffix.
@@ -259,16 +240,7 @@ namespace KittyUtils
          *
          * @return true if str ends with suffix, false otherwise.
          */
-        static inline bool endsWith(const std::string &str, const std::string &suffix, bool sensitive = true)
-        {
-            if (str.length() < suffix.length())
-                return false;
-            if (sensitive)
-            {
-                return str.compare(str.length() - suffix.length(), suffix.length(), suffix) == 0;
-            }
-            return std::equal(suffix.rbegin(), suffix.rend(), str.rbegin(), charEqualsIgnoreCase);
-        }
+        bool endsWith(const std::string &str, const std::string &suffix, bool sensitive = true);
 
         /**
          * @brief Trims whitespace from the beginning and end of a string.

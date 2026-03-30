@@ -68,6 +68,40 @@ namespace KittyUtils
         return ext;
     }
 
+    bool String::startsWith(const std::string &str, const std::string &prefix, bool sensitive)
+    {
+        if (str.length() < prefix.length())
+            return false;
+        if (sensitive)
+        {
+            return str.compare(0, prefix.length(), prefix) == 0;
+        }
+        return std::equal(prefix.begin(), prefix.end(), str.begin(), charEqualsIgnoreCase);
+    }
+
+    bool String::contains(const std::string &str, const std::string &substring, bool sensitive)
+    {
+        if (str.length() < substring.length())
+            return false;
+        if (sensitive)
+        {
+            return str.find(substring) != std::string::npos;
+        }
+        auto it = std::search(str.begin(), str.end(), substring.begin(), substring.end(), charEqualsIgnoreCase);
+        return it != str.end();
+    }
+
+    bool String::endsWith(const std::string &str, const std::string &suffix, bool sensitive)
+    {
+        if (str.length() < suffix.length())
+            return false;
+        if (sensitive)
+        {
+            return str.compare(str.length() - suffix.length(), suffix.length(), suffix) == 0;
+        }
+        return std::equal(suffix.rbegin(), suffix.rend(), str.rbegin(), charEqualsIgnoreCase);
+    }
+
     void String::trim(std::string &str)
     {
         str.erase(std::remove_if(str.begin(), str.end(), ::isspace), str.end());
