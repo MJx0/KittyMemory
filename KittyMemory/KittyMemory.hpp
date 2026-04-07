@@ -162,8 +162,24 @@ namespace KittyMemory
      * @param buffer Pointer to the buffer containing the data to write.
      * @param len Number of bytes to write.
      * @return True if the write operation is successful, false otherwise.
+     *
+     * @note This function shouldn't be used on executable memory,
+     * use @ref memExecWrite(void *, const void *, size_t) @endlink instead.
      */
     bool memWrite(void *address, const void *buffer, size_t len);
+
+    /**
+     * @brief Writes buffer content to an excutable address.
+     *
+     * @param address Pointer to the address to write to.
+     * @param buffer Pointer to the buffer containing the data to write.
+     * @param len Number of bytes to write.
+     * @return True if the write operation is successful, false otherwise.
+     *
+     @note Adding write permission on executable memory is not enough on emulators,
+     *  this is why this function exists which will add exec permission too.
+     */
+    bool memExecWrite(void *address, const void *buffer, size_t len);
 
     /**
      * @brief Reads /proc/self/cmdline to get the name of the current process.

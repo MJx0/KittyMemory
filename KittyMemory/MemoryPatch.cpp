@@ -152,7 +152,7 @@ bool MemoryPatch::Restore()
         return false;
 
 #ifdef __ANDROID__
-    return KittyMemory::memWrite(reinterpret_cast<void *>(_address), &_orig_code[0], _size);
+    return KittyMemory::memExecWrite(reinterpret_cast<void *>(_address), &_orig_code[0], _size);
 #elif __APPLE__
     return KittyMemory::memWrite(reinterpret_cast<void *>(_address), &_orig_code[0], _size) == KittyMemory::KMS_SUCCESS;
 #endif
@@ -164,7 +164,7 @@ bool MemoryPatch::Modify()
         return false;
 
 #ifdef __ANDROID__
-    return KittyMemory::memWrite(reinterpret_cast<void *>(_address), &_patch_code[0], _size);
+    return KittyMemory::memExecWrite(reinterpret_cast<void *>(_address), &_patch_code[0], _size);
 #elif __APPLE__
     return KittyMemory::memWrite(reinterpret_cast<void *>(_address), &_patch_code[0], _size) ==
            KittyMemory::KMS_SUCCESS;

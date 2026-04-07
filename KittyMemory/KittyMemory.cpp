@@ -132,9 +132,67 @@ namespace KittyMemory
             return true;
         }
 
-        if (memProtect(address, len, KT_PROT_RWX) != 0)
+        if (memProtect(address, len, addressMap.protection | PROT_WRITE) != 0)
         {
             KITTY_LOGE("memWrite err couldn't add write perm to address (%p, len: %zu, prot: %d)",
+                       address,
+                       len,
+                       addressMap.protection | PROT_WRITE);
+            return false;
+        }
+
+        memcpy(address, buffer, len);
+
+        if (memProtect(address, len, addressMap.protection) != 0)
+        {
+            KITTY_LOGE("memWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)",
+                       address,
+                       len,
+                       addressMap.protection);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool memExecWrite(void *address, const void *buffer, size_t len)
+    {
+        KITTY_LOGD("memExecWrite(%p, %p, %zu)", address, buffer, len);
+
+        if (!address)
+        {
+            KITTY_LOGE("memExecWrite err address (%p) is null", address);
+            return false;
+        }
+
+        if (!buffer)
+        {
+            KITTY_LOGE("memExecWrite err buffer (%p) is null", buffer);
+            return false;
+        }
+
+        if (!len)
+        {
+            KITTY_LOGE("memExecWrite err invalid len");
+            return false;
+        }
+
+        ProcMap addressMap = getAddressMap(address);
+        if (!addressMap.isValid())
+        {
+            KITTY_LOGE("memExecWrite err couldn't find address (%p) in any map", address);
+            return false;
+        }
+
+        if (addressMap.protection & PROT_WRITE)
+        {
+            memcpy(address, buffer, len);
+            return true;
+        }
+
+        if (memProtect(address, len, KT_PROT_RWX) != 0)
+        {
+            KITTY_LOGE("memExecWrite err couldn't add write perm to address (%p, len: %zu, prot: %d)",
                        address,
                        len,
                        KT_PROT_RWX);
@@ -145,12 +203,14 @@ namespace KittyMemory
 
         if (memProtect(address, len, KT_PROT_RX) != 0)
         {
-            KITTY_LOGE("memWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)",
+            KITTY_LOGE("memExecWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)",
                        address,
                        len,
                        KT_PROT_RX);
             return false;
         }
+
+        __builtin___clear_cache((char *)address, (char *)address + len);
 
         return true;
     }
