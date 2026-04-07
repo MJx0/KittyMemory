@@ -1,43 +1,124 @@
 #include "KittyUtils.hpp"
 
-#ifdef __ANDROID__
-#include <sys/system_properties.h>
-#endif
-
 namespace KittyUtils
 {
 
-#ifdef __ANDROID__
-    std::string getExternalStorage()
+    std::vector<uint8_t> randomBytes(std::size_t length)
     {
-        char *storage = getenv("EXTERNAL_STORAGE");
-        return storage ? storage : "/sdcard";
+        static std::mutex mtx;
+        std::lock_guard<std::mutex> lock(mtx);
+
+        static std::mt19937 gen{std::random_device{}()};
+
+        std::uniform_int_distribution<uint16_t> dist(0, 255);
+
+        std::vector<uint8_t> data(length);
+        for (auto &b : data)
+        {
+            b = static_cast<uint8_t>(dist(gen));
+        }
+
+        return data;
     }
 
-    int getAndroidVersion()
+    std::string randomString(size_t length)
+    {
+        static const std::string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+        static std::mutex mtx;
+        std::lock_guard<std::mutex> lock(mtx);
+
+        static std::default_random_engine rnd(std::random_device{}());
+
+        std::uniform_int_distribution<std::string::size_type> dist(0, chars.size() - 1);
+
+        std::string str(length, '\0');
+        for (size_t i = 0; i < length; ++i)
+            str[i] = chars[dist(rnd)];
+
+        return str;
+    }
+
+#ifdef __ANDROID__
+    int Android::getVersion()
     {
         static int ver = 0;
         if (ver > 0)
             return ver;
 
-        char buf[0xff] = {};
-        if (__system_property_get("ro.build.version.release", buf))
-            ver = std::atoi(buf);
-
+        ver = getSystemProperty<int>("ro.build.version.release", 0);
         return ver;
     }
 
-    int getAndroidSDK()
+    int Android::getSDK()
     {
         static int sdk = 0;
         if (sdk > 0)
             return sdk;
 
-        char buf[0xff] = {};
-        if (__system_property_get("ro.build.version.sdk", buf))
-            sdk = std::atoi(buf);
-
+        sdk = getSystemProperty<int>("ro.build.version.sdk", 0);
         return sdk;
+    }
+
+    bool Android::is64BitSupported()
+    {
+        static bool once = false;
+        static bool is64 = false;
+        if (!once)
+        {
+            char value[0xff]{};
+            if (__system_property_get("ro.product.cpu.abilist", value) == 0)
+                __system_property_get("ro.product.cpu.abi", value);
+
+            std::string abi = value;
+            is64 = abi.find("64") != std::string::npos;
+            once = true;
+        }
+        return is64;
+    }
+
+    std::string Android::getAppInternalDataDir()
+    {
+        std::string dir = getAppInternalCacheDir();
+        if (!dir.empty())
+        {
+            return Path::fileDirectory(dir);
+        }
+        return dir;
+    }
+
+    std::string Android::getAppInternalFilesDir()
+    {
+        std::string dir = getAppInternalCacheDir();
+        if (!dir.empty())
+        {
+            dir = Path::fileDirectory(dir);
+            dir += "/files";
+        }
+        return dir;
+    }
+
+    std::string Android::getAppInternalCacheDir()
+    {
+        const char *tmpdir = std::getenv("TMPDIR");
+        if (tmpdir && tmpdir[0] != '\0' && access(tmpdir, F_OK) == 0)
+            return tmpdir;
+
+        std::string dir = "/data/data/";
+        dir += getprogname();
+        dir += "/cache";
+        if (access(dir.c_str(), F_OK) == 0)
+            return dir;
+
+        dir = "/data/user/";
+        dir += std::to_string(getUserId());
+        dir += "/";
+        dir += getprogname();
+        dir += "/cache";
+        if (access(dir.c_str(), F_OK) == 0)
+            return dir;
+
+        return std::string();
     }
 #endif
 
@@ -100,6 +181,36 @@ namespace KittyUtils
             return str.compare(str.length() - suffix.length(), suffix.length(), suffix) == 0;
         }
         return std::equal(suffix.rbegin(), suffix.rend(), str.rbegin(), charEqualsIgnoreCase);
+    }
+
+    bool String::startsWith(const std::string &str, const std::vector<std::string> &prefixes, bool sensitive)
+    {
+        for (const auto &prefix : prefixes)
+        {
+            if (startsWith(str, prefix, sensitive))
+                return true;
+        }
+        return false;
+    }
+
+    bool String::contains(const std::string &str, const std::vector<std::string> &substrings, bool sensitive)
+    {
+        for (const auto &substring : substrings)
+        {
+            if (contains(str, substring, sensitive))
+                return true;
+        }
+        return false;
+    }
+
+    bool String::endsWith(const std::string &str, const std::vector<std::string> &suffixes, bool sensitive)
+    {
+        for (const auto &suffix : suffixes)
+        {
+            if (endsWith(str, suffix, sensitive))
+                return true;
+        }
+        return false;
     }
 
     void String::trim(std::string &str)
@@ -219,23 +330,6 @@ namespace KittyUtils
         return str;
     }
 
-    std::string String::random(size_t length)
-    {
-        static const std::string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
-        static std::mutex mtx;
-        std::lock_guard<std::mutex> lock(mtx);
-
-        static std::default_random_engine rnd(std::random_device{}());
-        static std::uniform_int_distribution<std::string::size_type> dist(0, chars.size() - 1);
-
-        std::string str(length, '\0');
-        for (size_t i = 0; i < length; ++i)
-            str[i] = chars[dist(rnd)];
-
-        return str;
-    }
-
     bool Data::fromHex(std::string in, void *data)
     {
         if (in.empty() || !data || !String::validateHex(in))
@@ -298,7 +392,7 @@ namespace KittyUtils
                 uint32_t h = 0, g;
                 for (; *name; name++)
                 {
-                    h = (h << 4) + *name;
+                    h = (h << 4) + static_cast<uint8_t>(*name);
                     g = h & 0xf0000000;
                     if (g)
                         h ^= g >> 24;
@@ -314,6 +408,9 @@ namespace KittyUtils
                                               size_t strsz,
                                               const char *symbol_name)
             {
+                if (!elfhash || !symtab || !strtab || !symbol_name)
+                    return nullptr;
+
                 const auto *elf_hash = reinterpret_cast<const uint32_t *>(elfhash);
                 const auto *symbol_table = reinterpret_cast<const uint8_t *>(symtab);
                 const auto *string_table = reinterpret_cast<const char *>(strtab);
@@ -329,16 +426,39 @@ namespace KittyUtils
                 const uint32_t *bucket = elf_hash + 2;
                 const uint32_t *chain = bucket + num_bucket;
 
-                const uint32_t name_hash = hashSymName(symbol_name);
-                for (uint32_t i = bucket[name_hash % num_bucket]; i != 0 && i < num_chain; i = chain[i])
-                {
-                    const auto *symbol = reinterpret_cast<const KT_ElfW(Sym) *>(symbol_table + (syment * i));
-                    if (!symbol || symbol->st_name >= strsz)
-                        break;
+                uint32_t name_hash = hashSymName(symbol_name);
 
-                    std::string sym_str = std::string(string_table + symbol->st_name);
-                    if (!sym_str.empty() && sym_str == symbol_name)
+                uint32_t i = bucket[name_hash % num_bucket];
+
+                while (i != 0 && i < num_chain)
+                {
+                    const KT_ElfW(Sym) *symbol = reinterpret_cast<const KT_ElfW(Sym) *>(symbol_table + syment * i);
+
+                    if (!symbol || symbol->st_name >= strsz)
+                    {
+                        i = chain[i];
+                        continue;
+                    }
+
+                    const char *sym_str = string_table + symbol->st_name;
+
+                    const char *p1 = sym_str;
+                    const char *p2 = symbol_name;
+                    bool match = true;
+                    while (*p1 && *p2)
+                    {
+                        if (*p1 != *p2)
+                        {
+                            match = false;
+                            break;
+                        }
+                        p1++;
+                        p2++;
+                    }
+                    if (match && *p2 == '\0')
                         return symbol;
+
+                    i = chain[i];
                 }
 
                 return nullptr;
@@ -354,7 +474,7 @@ namespace KittyUtils
             {
                 uint32_t h = 5381;
                 for (; *name; name++)
-                    h = (h << 5) + h + *name;
+                    h = ((h << 5) + h) + static_cast<uint8_t>(*name); // h*33 + c
                 return h;
             }
 
@@ -365,18 +485,18 @@ namespace KittyUtils
                                               size_t strsz,
                                               const char *symbol_name)
             {
+                if (!gnuhash || !symtab || !strtab || !symbol_name)
+                    return nullptr;
+
                 const auto *gnu_hash = reinterpret_cast<const uint32_t *>(gnuhash);
                 const auto *symbol_table = reinterpret_cast<const uint8_t *>(symtab);
                 const auto *string_table = reinterpret_cast<const char *>(strtab);
-
-                const uint32_t name_hash = hashSymName(symbol_name);
 
                 const uint32_t num_buckets = gnu_hash[0];
                 if (!num_buckets)
                     return nullptr;
 
                 const uint32_t sym_offset = gnu_hash[1];
-
                 const uint32_t bloom_size = gnu_hash[2];
                 // must be a power of 2
                 if (!bloom_size || (bloom_size & (bloom_size - 1)) != 0)
@@ -387,9 +507,11 @@ namespace KittyUtils
                 const auto *buckets = reinterpret_cast<const uint32_t *>(&bloom[bloom_size]);
                 const uint32_t *chain = &buckets[num_buckets];
 
-                uintptr_t word = bloom[(name_hash / KT_ELFCLASS_BITS) % bloom_size];
-                uintptr_t mask = 0 | (uintptr_t)1 << (name_hash % KT_ELFCLASS_BITS) |
-                                 (uintptr_t)1 << ((name_hash >> bloom_shift) % KT_ELFCLASS_BITS);
+                uint32_t name_hash = hashSymName(symbol_name);
+
+                uintptr_t word = bloom[(name_hash / (sizeof(uintptr_t) * 8)) % bloom_size];
+                uintptr_t mask = ((uintptr_t)1 << (name_hash % (sizeof(uintptr_t) * 8))) |
+                                 ((uintptr_t)1 << ((name_hash >> bloom_shift) % (sizeof(uintptr_t) * 8)));
 
                 // If at least one bit is not set, a symbol is surely missing.
                 if ((word & mask) != mask)
@@ -399,22 +521,36 @@ namespace KittyUtils
                 if (sym_idx < sym_offset)
                     return nullptr;
 
-                // Loop through the chain.
                 while (true)
                 {
-                    const auto *symbol = reinterpret_cast<const KT_ElfW(Sym) *>(symbol_table + (syment * sym_idx));
+                    const KT_ElfW(Sym) *symbol = reinterpret_cast<const KT_ElfW(Sym) *>(symbol_table +
+                                                                                        syment * sym_idx);
+
                     if (!symbol || symbol->st_name >= strsz)
                         break;
 
-                    const uint32_t hash = chain[sym_idx - sym_offset];
+                    uint32_t hash = chain[sym_idx - sym_offset];
                     if ((name_hash | 1) == (hash | 1))
                     {
-                        std::string sym_str = std::string(string_table + symbol->st_name);
-                        if (!sym_str.empty() && sym_str == symbol_name)
+                        const char *sym_str = string_table + symbol->st_name;
+
+                        const char *p1 = sym_str;
+                        const char *p2 = symbol_name;
+                        bool match = true;
+                        while (*p1 && *p2)
+                        {
+                            if (*p1 != *p2)
+                            {
+                                match = false;
+                                break;
+                            }
+                            p1++;
+                            p2++;
+                        }
+                        if (match && *p2 == '\0')
                             return symbol;
                     }
 
-                    // Chain ends with an element with the lowest bit set to 1.
                     if (hash & 1)
                         break;
 

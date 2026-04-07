@@ -49,10 +49,13 @@ inline size_t KTGetPageSize()
 #define KT_ALIGN_UP(ptr, align) (((uintptr_t)(ptr) + (align) - 1) & ~((align) - 1))
 #define KT_ALIGN_DOWN(ptr, align) (((uintptr_t)(ptr)) & ~((uintptr_t)(align) - 1))
 
+#define KT_IS_ALIGNED_OF(ptr, align) (ptr == (((uintptr_t)(ptr) + (align) - 1) & ~((align) - 1)))
+
 #define KITTY_LOG_TAG "KittyMemory"
 
 #ifdef __ANDROID__
 #include <android/log.h>
+#include <sys/system_properties.h>
 
 #ifdef kITTYMEMORY_DEBUG
 #define KITTY_LOGD(fmt, ...) ((void)__android_log_print(ANDROID_LOG_DEBUG, KITTY_LOG_TAG, fmt, ##__VA_ARGS__))
@@ -119,22 +122,225 @@ inline size_t KTGetPageSize()
  */
 namespace KittyUtils
 {
-
 #ifdef __ANDROID__
     /**
-     * @brief Returns the path to the external storage directory.
+     * @brief Provides utility functions for Android.
      */
-    std::string getExternalStorage();
+    namespace Android
+    {
+        inline int getUserId()
+        {
+            uid_t uid = getuid(); // Linux UID
+            return uid / 100000;  // approximate Android user ID
+        }
 
-    /**
-     * @brief Returns the version of the Android operating system.
-     */
-    int getAndroidVersion();
+        /**
+         * @brief Get an Android system property as a typed value.
+         *
+         * Supports std::string, bool, integral, and floating-point types.
+         * Returns `defaultValue` if the property is missing or conversion fails.
+         *
+         * @tparam T Desired type
+         * @param key Property name (e.g., "ro.build.version.sdk")
+         * @param defaultValue Value returned if property not found or conversion fails
+         * @return Property value converted to T
+         */
+        template <typename T>
+        inline T getSystemProperty(const std::string &key, T defaultValue)
+        {
+            static_assert(
+                std::is_same_v<T, std::string> || std::is_same_v<T, bool> || std::is_integral_v<T> ||
+                    std::is_floating_point_v<T>,
+                "getSystemProperty: unsupported type. Supported types: string, bool, integral, floating-point.");
 
-    /**
-     * @brief Returns the SDK version of the Android operating system.
-     */
-    int getAndroidSDK();
+            char value[PROP_VALUE_MAX] = {0};
+            int len = __system_property_get(key.c_str(), value);
+            if (len <= 0)
+                return defaultValue;
+
+            if constexpr (std::is_same_v<T, std::string>)
+            {
+                return std::string(value, len);
+            }
+            else if constexpr (std::is_same_v<T, bool>)
+            {
+                for (int i = 0; i < len; ++i)
+                    value[i] = std::tolower(value[i]);
+
+                if (std::strcmp(value, "1") == 0 || std::strcmp(value, "true") == 0 || std::strcmp(value, "y") == 0 ||
+                    std::strcmp(value, "yes") == 0)
+                    return true;
+
+                if (std::strcmp(value, "0") == 0 || std::strcmp(value, "false") == 0 || std::strcmp(value, "n") == 0 ||
+                    std::strcmp(value, "no") == 0)
+                    return false;
+
+                return defaultValue;
+            }
+            else if constexpr (std::is_integral_v<T>)
+            {
+                char *end = nullptr;
+                long long result = std::strtoll(value, &end, 0);
+                if (end == value)
+                    return defaultValue;
+                return static_cast<T>(result);
+            }
+            else if constexpr (std::is_floating_point_v<T>)
+            {
+                char *end = nullptr;
+                double result = std::strtod(value, &end);
+                if (end == value)
+                    return defaultValue;
+                return static_cast<T>(result);
+            }
+
+            // unsupported type
+            return defaultValue;
+        }
+
+        /**
+         * @brief Returns the version of the Android operating system.
+         */
+        int getVersion();
+
+        /**
+         * @brief Returns the SDK version of the Android operating system.
+         */
+        int getSDK();
+
+        /**
+         * @brief Returns true if Android operating system supports 64bit.
+         */
+        bool is64BitSupported();
+
+        /**
+         * @brief Get the base external storage directory.
+         *
+         * Usually:
+         * /storage/emulated/0
+         *
+         * Uses the EXTERNAL_STORAGE environment variable.
+         *
+         * @return Absolute path to external storage root, falls back to "/sdcard" if not defined.
+         */
+        inline std::string getExternalStorage()
+        {
+            const char *storage = std::getenv("EXTERNAL_STORAGE");
+            return (storage && storage[0] != '\0') ? storage : "/sdcard";
+        }
+
+        /**
+         * @brief Get the internal data directory for the current Android app.
+         *
+         * Equivalent to:
+         * Context.getDataDir()
+         *
+         * Example:
+         * /data/user/<user_id>/<package_name>
+         *
+         * @return Absolute path to app internal data directory.
+         */
+        std::string getAppInternalDataDir();
+
+        /**
+         * @brief Get the internal files directory for the current Android app.
+         *
+         * Equivalent to:
+         * Context.getFilesDir()
+         *
+         * Example:
+         * /data/user/<user_id>/<package_name>/files
+         *
+         * @return Absolute path to app internal files directory.
+         */
+        std::string getAppInternalFilesDir();
+
+        /**
+         * @brief Get the internal cache directory for the current Android app.
+         * the system usually sets the TMPDIR environment variable.
+         * If TMPDIR is not set, it falls back to `/data/user/<user_id>/<package_name>/cache`
+         *
+         * Equivalent to:
+         * Context.getCacheDir()
+         *
+         * Example:
+         * /data/user/<user_id>/<package_name>/cache
+         *
+         * @return Absolute path to app internal cache directory.
+         */
+        std::string getAppInternalCacheDir();
+
+        /**
+         * @brief Get the external data directory for the current Android app.
+         *
+         * Example:
+         * /storage/emulated/0/Android/data/<package>
+         *
+         * @return Absolute path to app external data.
+         */
+        inline std::string getAppExternalDataDir()
+        {
+            return getExternalStorage() + "/Android/data/" + getprogname();
+        }
+
+        /**
+         * @brief Get the external files directory for the current Android app.
+         *
+         * Equivalent to:
+         * Context.getExternalFilesDir(null)
+         *
+         * Example:
+         * /storage/emulated/0/Android/data/<package>/files
+         *
+         * @return Absolute path to external files directory.
+         */
+        inline std::string getAppExternalFilesDir()
+        {
+            return getAppExternalDataDir() + "/files";
+        }
+
+        /**
+         * @brief Get the external cache directory for the current Android app.
+         *
+         * Equivalent to:
+         * Context.getExternalCacheDir()
+         *
+         * Example:
+         * /storage/emulated/0/Android/data/<package>/cache
+         *
+         * @return Absolute path to external cache directory.
+         */
+        inline std::string getAppExternalCacheDir()
+        {
+            return getAppExternalDataDir() + "/cache";
+        }
+
+        /**
+         * @brief Get the external media directory for the current Android app (Android 10+).
+         *
+         * Example:
+         * /storage/emulated/0/Android/media/<package>
+         *
+         * @return Absolute path to external media directory.
+         */
+        inline std::string getAppExternalMediaDir()
+        {
+            return getExternalStorage() + "/Android/media/" + getprogname();
+        }
+
+        /**
+         * @brief Get the OBB directory for current Android app.
+         *
+         * Example:
+         * /storage/emulated/0/Android/obb/<package>
+         *
+         * @return Absolute path to OBB directory.
+         */
+        inline std::string getAppObbDir()
+        {
+            return getExternalStorage() + "/Android/obb/" + getprogname();
+        }
+    } // namespace Android
 #endif
 
     /**
@@ -221,6 +427,17 @@ namespace KittyUtils
         bool startsWith(const std::string &str, const std::string &prefix, bool sensitive = true);
 
         /**
+         * @brief Checks if a string starts with any of the given prefixes.
+         *
+         * @param str The string to check.
+         * @param prefixes A list of prefixes to look for.
+         * @param sensitive Whether the comparison should be case-sensitive (default is true).
+         *
+         * @return true if str starts with at least one prefix in prefixes, false otherwise.
+         */
+        bool startsWith(const std::string &str, const std::vector<std::string> &prefixes, bool sensitive = true);
+
+        /**
          * @brief Checks if a string contains a given substring.
          *
          * @param str The string to check.
@@ -232,6 +449,17 @@ namespace KittyUtils
         bool contains(const std::string &str, const std::string &substring, bool sensitive = true);
 
         /**
+         * @brief Checks if a string contains any of the given substrings.
+         *
+         * @param str The string to check.
+         * @param substrings A list of substrings to look for.
+         * @param sensitive Whether the comparison should be case-sensitive (default is true).
+         *
+         * @return true if str contains at least one substring in substrings, false otherwise.
+         */
+        bool contains(const std::string &str, const std::vector<std::string> &substrings, bool sensitive = true);
+
+        /**
          * @brief Checks if a string ends with a given suffix.
          *
          * @param str The string to check.
@@ -241,6 +469,17 @@ namespace KittyUtils
          * @return true if str ends with suffix, false otherwise.
          */
         bool endsWith(const std::string &str, const std::string &suffix, bool sensitive = true);
+
+        /**
+         * @brief Checks if a string ends with any of the given suffixes.
+         *
+         * @param str The string to check.
+         * @param suffixes A list of suffixes to look for.
+         * @param sensitive Whether the comparison should be case-sensitive (default is true).
+         *
+         * @return true if str ends with at least one suffix in suffixes, false otherwise.
+         */
+        bool endsWith(const std::string &str, const std::vector<std::string> &suffixes, bool sensitive = true);
 
         /**
          * @brief Trims whitespace from the beginning and end of a string.
@@ -276,14 +515,6 @@ namespace KittyUtils
          * @return The formatted string.
          */
         std::string fmt(const char *fmt, ...);
-
-        /**
-         * @brief Generates a random string of a specified length.
-         *
-         * @param length The length of the random string to generate.
-         * @return A random string.
-         */
-        std::string random(size_t length);
     } // namespace String
 
     /**
@@ -303,10 +534,26 @@ namespace KittyUtils
         std::lock_guard<std::mutex> lock(mtx);
 
         static std::mt19937 gen{std::random_device{}()};
-        static std::uniform_int_distribution<T> dist;
 
+        std::uniform_int_distribution<T> dist;
         return dist(gen, param_type{min, max});
     }
+
+    /**
+     * @brief Generates a random bytes of a specified length.
+     *
+     * @param length The length of the random bytes to generate.
+     * @return Vector containing random byte values in the range [0, 255].
+     */
+    std::vector<uint8_t> randomBytes(std::size_t length);
+
+    /**
+     * @brief Generates a random string of a specified length.
+     *
+     * @param length The length of the random string to generate.
+     * @return A random string.
+     */
+    std::string randomString(size_t length);
 
     /**
      * @brief Provides utility functions for data.
