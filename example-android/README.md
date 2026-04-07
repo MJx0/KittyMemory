@@ -2,7 +2,7 @@
 
 <h3>This is an example android shared lib.</h3>
 
-Requires C++11 or above.</br>
+Requires C++17 or above.</br>
 Android API 21 or above for keystone linking.
 
 See how to use KittyMemory in [example.cpp](example.cpp).
