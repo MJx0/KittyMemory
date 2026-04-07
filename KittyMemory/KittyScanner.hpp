@@ -677,6 +677,14 @@ namespace KittyScanner
         }
 
         /**
+         * @brief Returns true if initialized, false otherwise.
+         */
+        inline bool isInitialized() const
+        {
+            return isValid() && _init;
+        }
+
+        /**
          * @brief Converts the LinkerScanner object to an ElfScanner pointer.
          * @return The ElfScanner pointer.
          */
