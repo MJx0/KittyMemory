@@ -365,4 +365,27 @@ public:
      * @param cb The callback function to be called for each file.
      */
     static void listFilesCallback(const std::string &dir, std::function<bool(const std::string &)> cb);
+
+    /**
+     * @brief Recursively creates a directory path.
+     *
+     * This function creates all intermediate directories in the given path,
+     * similar to the behavior of `mkdir -p` on POSIX systems.
+     *
+     * @param path The full directory path to create (absolute or relative).
+     * @param mode The permissions to use when creating directories (default: 0755).
+     *
+     * @return true if the directory exists or was successfully created,
+     *         false if an error occurred.
+     *
+     * @note If a directory already exists, it is not treated as an error.
+     *
+     * @warning This function does not verify whether an existing path component
+     *          is a directory or a file. If a file exists in the path, creation
+     *          will fail.
+     *
+     *
+     * @see mkdir(2)
+     */
+    static bool createDirectoryRecursive(const std::string &path, mode_t mode = 0755);
 };

@@ -288,3 +288,50 @@ void KittyIOFile::listFilesCallback(const std::string &dirPath, std::function<bo
 
     closedir(dir);
 }
+
+bool KittyIOFile::createDirectoryRecursive(const std::string &path, mode_t mode)
+{
+    if (path.empty())
+        return false;
+
+    std::string current;
+    size_t pos = 0;
+
+    // Handle absolute paths
+    if (path[0] == '/')
+    {
+        current = "/";
+        pos = 1;
+    }
+
+    while (pos <= path.size())
+    {
+        size_t next = path.find('/', pos);
+        std::string part = path.substr(pos, next - pos);
+
+        if (!part.empty())
+        {
+            // Append next path component
+            if (!current.empty() && current.back() != '/')
+                current += "/";
+            
+            current += part;
+
+            // Attempt to create directory
+            if (mkdir(current.c_str(), mode) != 0)
+            {
+                if (errno != EEXIST)
+                {
+                    return false;
+                }
+            }
+        }
+
+        if (next == std::string::npos)
+            break;
+
+        pos = next + 1;
+    }
+
+    return true;
+}
