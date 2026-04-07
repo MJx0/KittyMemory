@@ -161,25 +161,25 @@ void test_thread()
 
     // format asm
     auto asm_fmt = KittyUtils::String::fmt("mov x0, #%d; ret", 65536);
-    gPatches.get_gold = MemoryPatch::createWithAsm(il2cppBase + 0x1D8B054, MP_ASM_ARM64, asm_fmt);
+    gPatches.get_gold = MemoryPatch::createWithAsm(il2cppBase + 0x01F4AF6C, MP_ASM_ARM64, asm_fmt);
 #endif
 
-    KITTY_LOGI("Patch Address: %p", (void *)gPatches.get_canShoot.get_TargetAddress());
-    KITTY_LOGI("Patch Size: %zu", gPatches.get_canShoot.get_PatchSize());
-    KITTY_LOGI("Current Bytes: %s", gPatches.get_canShoot.get_CurrBytes().c_str());
+    KITTY_LOGI("Patch Address: %p", (void *)gPatches.get_gold.get_TargetAddress());
+    KITTY_LOGI("Patch Size: %zu", gPatches.get_gold.get_PatchSize());
+    KITTY_LOGI("Current Bytes: %s", gPatches.get_gold.get_CurrBytes().c_str());
 
     // modify & print bytes
-    if (gPatches.get_canShoot.Modify())
+    if (gPatches.get_gold.Modify())
     {
-        KITTY_LOGI("get_canShoot has been modified successfully");
-        KITTY_LOGI("Current Bytes: %s", gPatches.get_canShoot.get_CurrBytes().c_str());
+        KITTY_LOGI("get_gold has been modified successfully");
+        KITTY_LOGI("Current Bytes: %s", gPatches.get_gold.get_CurrBytes().c_str());
     }
 
     // restore & print bytes
-    if (gPatches.get_canShoot.Restore())
+    if (gPatches.get_gold.Restore())
     {
-        KITTY_LOGI("get_canShoot has been restored successfully");
-        KITTY_LOGI("Current Bytes: %s", gPatches.get_canShoot.get_CurrBytes().c_str());
+        KITTY_LOGI("get_gold has been restored successfully");
+        KITTY_LOGI("Current Bytes: %s", gPatches.get_gold.get_CurrBytes().c_str());
     }
 
     KITTY_LOGI("==================== PATTERN SCAN ===================");
@@ -236,11 +236,12 @@ void test_thread()
     KITTY_LOGI("=====================================================");
 
     // 16 rows, no ASCII
-    KITTY_LOGI("\n%s", KittyUtils::Data::hexDump<16, false>((void *)g_il2cppElf.baseSegment().startAddress, 100).c_str());
+    KITTY_LOGI("\n%s",
+               KittyUtils::Data::hexDump<16, false>((void *)g_il2cppElf.baseSegment().startAddress, 100).c_str());
 
     KITTY_LOGI("===================== ELFS SCAN ====================");
 
-    // gret all elfs
+    // get all elfs
     const auto elfs = ElfScanner::getAllELFs();
     // get app related elfs
     // const auto elfs = ElfScanner::getAllELFs(EScanElfType::Any, EScanElfFilter::App);
@@ -252,41 +253,77 @@ void test_thread()
         KITTY_LOGI("elfs(%p) -> %s", (void *)it.base(), it.realPath().c_str());
     }
 
-#if defined(__x86_64__) || defined(__i386__)
-    KITTY_LOGI("============== NativeBridge Linker ==============");
+    // get all native soinfos
+    const auto soinfos = LinkerScanner::Get().allSoInfo();
+    KITTY_LOGI("Found %d native soinfo", int(soinfos.size()));
 
-    void *libcHandle = NativeBridgeLinker::dlopen("path/to/lib", RTLD_NOW);
-    if (libcHandle)
+    if (NativeBridgeScanner::Get().isValid())
     {
-        void *fnInit = NativeBridgeLinker::dlsym(libcHandle, "my_init_func");
-        KITTY_LOGI("nb] handle(%p) - fnInit(%p)", libcHandle, fnInit);
-        if (fnInit)
+        // emulated soinfo
+        const auto emusoinfos = NativeBridgeScanner::Get().allSoInfo();
+        KITTY_LOGI("Found %d emulated soinfo", int(emusoinfos.size()));
+
+        KITTY_LOGI("============== NativeBridge Linker ==============");
+
+        void *libcHandle = NativeBridgeLinker::dlopen("path/to/lib", RTLD_NOW);
+        if (libcHandle)
         {
-            // call
-            ((void (*)(void *))fnInit)(nullptr);
+            void *fnInit = NativeBridgeLinker::dlsym(libcHandle, "my_init_func");
+            KITTY_LOGI("nb] handle(%p) - fnInit(%p)", libcHandle, fnInit);
+            if (fnInit)
+            {
+                // call
+                ((void (*)(void *))fnInit)(nullptr);
+            }
+        }
+        else
+        {
+            const char *err = NativeBridgeLinker::dlerror();
+            if (err)
+                KITTY_LOGE("dlerror %s", err);
+        }
+
+        NativeBridgeLinker::dl_iterate_phdr(
+            [](const kitty_soinfo_t *info) -> bool {
+                KITTY_LOGI("nb_soinfo]: { %p -> %s }", (void *)info->base, info->realpath.c_str());
+                return false;
+            });
+
+        kitty_soinfo_t info{};
+        if (NativeBridgeLinker::dladdr((void *)il2cppBase, &info))
+        {
+            KITTY_LOGI("nb dladdr] %p -> %s", (void *)info.base, info.realpath.c_str());
         }
     }
-    else
+
+
+    KITTY_LOGI("============== App Internal Files ==============");
+
+    auto dir = KittyUtils::Android::getAppInternalDataDir();
+    if (!dir.empty())
     {
-        const char *err = NativeBridgeLinker::dlerror();
-        if (err)
-            KITTY_LOGE("dlerror %s", err);
+        KITTY_LOGI("App Internal Data: %s", dir.c_str());
+
+        KittyIOFile::listFilesCallback(dir, [](const std::string &entry) -> bool {
+            KITTY_LOGI("%s", entry.c_str());
+            return false;
+        });
     }
 
-    NativeBridgeLinker::dl_iterate_phdr([](const kitty_soinfo_t *info) -> bool {
-        KITTY_LOGI("nb] %p -> %s", (void *)info->base, info->realpath.c_str() ? info->realpath.c_str() : "");
-        return false;
-    });
+    KITTY_LOGI("============== App External Files ==============");
 
-    kitty_soinfo_t info{};
-    if (NativeBridgeLinker::dladdr((void *)il2cppBase, &info))
+    dir = KittyUtils::Android::getAppExternalDataDir();
+    if (!dir.empty())
     {
-        KITTY_LOGI("nb dladdr] %p -> %s", (void *)info.base, info.realpath.c_str());
+        KITTY_LOGI("App External Data: %s", dir.c_str());
+        KittyIOFile::listFilesCallback(dir, [](const std::string &entry) -> bool {
+            KITTY_LOGI("%s", entry.c_str());
+            return false;
+        });
     }
-#endif
 }
 
-#if 1
+#if 0
 __attribute__((constructor)) void init()
 {
     std::thread(test_thread).detach();
