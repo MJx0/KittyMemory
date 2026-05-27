@@ -215,9 +215,14 @@ void test_thread()
     // scan with IDA pattern get one result
     found_at = KittyScanner::findIdaPatternFirst(search_start, search_end, "33 ? 55 66 ? 77 88 ? 99");
     KITTY_LOGI("found IDA pattern at: %p", (void *)found_at);
+    // scan with IDA pattern that starts with wildcards
+    found_at = KittyScanner::findIdaPatternFirst(search_start, search_end, "? ? 55 66 ? 77 88 ? 99");
+    KITTY_LOGI("found IDA leading-wildcard pattern at: %p", (void *)found_at);
     // scan with IDA pattern get all results
     found_at_list = KittyScanner::findIdaPatternAll(search_start, search_end, "33 ? 55 66 ? 77 88 ? 99");
     KITTY_LOGI("found IDA pattern results: %zu", found_at_list.size());
+    found_at_list = KittyScanner::findIdaPatternAll(search_start, search_end, "? ? 55 66 ? 77 88 ? 99");
+    KITTY_LOGI("found IDA leading-wildcard pattern results: %zu", found_at_list.size());
 
     // scan with data type & get one result
     uint32_t data = 0xdeadbeef;

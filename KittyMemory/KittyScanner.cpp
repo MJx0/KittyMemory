@@ -29,18 +29,32 @@ namespace KittyScanner
         if (mask_len == 0 || start >= end || (end - start) < mask_len)
             return 0;
 
-        const uint8_t first_byte = pattern[0];
         const uint8_t *scan_start = reinterpret_cast<const uint8_t *>(start);
         const uint8_t *scan_end = reinterpret_cast<const uint8_t *>(end - mask_len);
 
-        for (const uint8_t *cur = scan_start; cur <= scan_end; ++cur)
+        // Anchor memchr on the first required byte in the mask.
+        // This preserves wildcard-leading IDA pattern semantics.
+        size_t anchor_index = 0;
+        while (anchor_index < mask_len && mask[anchor_index] != 'x')
+            ++anchor_index;
+
+        // All-wildcard mask matches at range start.
+        if (anchor_index == mask_len)
+            return start;
+
+        const uint8_t anchor_byte = pattern[anchor_index];
+        const uint8_t *anchor_scan_start = scan_start + anchor_index;
+        const uint8_t *anchor_scan_end = scan_end + anchor_index;
+
+        for (const uint8_t *cur = anchor_scan_start; cur <= anchor_scan_end; ++cur)
         {
-            cur = static_cast<const uint8_t *>(memchr(cur, first_byte, (scan_end - cur) + 1));
+            cur = static_cast<const uint8_t *>(memchr(cur, anchor_byte, (anchor_scan_end - cur) + 1));
             if (!cur)
                 break;
 
-            if (compare(cur, pattern, mask))
-                return reinterpret_cast<uintptr_t>(cur);
+            const uint8_t *candidate = cur - anchor_index;
+            if (compare(candidate, pattern, mask))
+                return reinterpret_cast<uintptr_t>(candidate);
         }
         return 0;
     }
