@@ -73,7 +73,7 @@ inline size_t KTGetPageSize()
 #include <os/log.h>
 
 #ifdef kITTYMEMORY_DEBUG
-#define KITTY_LOGD(fmt, ...) os_log(OS_LOG_DEFAULT, "D " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
+#define KITTY_LOGD(fmt, ...) os_log(OS_LOG_DEFAULT, "(D) " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
 #else
 #define KITTY_LOGD(fmt, ...)                                                                                           \
     do                                                                                                                 \
@@ -81,8 +81,8 @@ inline size_t KTGetPageSize()
     } while (0)
 #endif
 
-#define KITTY_LOGI(fmt, ...) os_log(OS_LOG_DEFAULT, "I " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
-#define KITTY_LOGE(fmt, ...) os_log_error(OS_LOG_DEFAULT, "E " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
+#define KITTY_LOGI(fmt, ...) os_log(OS_LOG_DEFAULT, "(I) " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
+#define KITTY_LOGE(fmt, ...) os_log_error(OS_LOG_DEFAULT, "(E) " KITTY_LOG_TAG ": " fmt, ##__VA_ARGS__)
 
 #endif
 
