@@ -4,14 +4,14 @@
 #ifndef KEYSTONE_ENGINE_H
 #define KEYSTONE_ENGINE_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifdef _MSC_VER     // MSVC compiler
 #pragma warning(disable:4201)
