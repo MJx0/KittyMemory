@@ -296,71 +296,6 @@ namespace KittyMemory
     };
 
     /**
-     * @brief Data structure for segment information.
-     */
-    struct seg_data_t
-    {
-        uintptr_t start, end;
-        unsigned long size;
-        seg_data_t() : start(0), end(0), size(0)
-        {
-        }
-    };
-
-    /**
-     * @brief Represents a memory file information.
-     */
-    class MemoryFileInfo
-    {
-    public:
-        uint32_t index;
-#ifdef __LP64__
-        const mach_header_64 *header;
-#else
-        const mach_header *header;
-#endif
-        const char *name;
-        intptr_t address;
-
-        MemoryFileInfo() : index(0), header(nullptr), name(nullptr), address(0)
-        {
-        }
-
-        /**
-         * @brief Retrieves the segment data by name.
-         *
-         * @param seg_name Segment name.
-         * @return seg_data_t containing segment start, end, and size.
-         */
-        inline seg_data_t getSegment(const char *seg_name) const
-        {
-            seg_data_t data{};
-            if (!header || !seg_name)
-                return data;
-            data.start = uintptr_t(getsegmentdata(header, seg_name, &data.size));
-            data.end = data.start + data.size;
-            return data;
-        }
-
-        /**
-         * @brief Retrieves the section data by name.
-         *
-         * @param seg_name Segment name.
-         * @param sect_name Section name.
-         * @return seg_data_t containing section start, end, and size.
-         */
-        inline seg_data_t getSection(const char *seg_name, const char *sect_name) const
-        {
-            seg_data_t data{};
-            if (!header || !seg_name || !sect_name)
-                return data;
-            data.start = uintptr_t(getsectiondata(header, seg_name, sect_name, &data.size));
-            data.end = data.start + data.size;
-            return data;
-        }
-    };
-
-    /**
      * @brief Writes buffer content to an address.
      *
      * @param address Pointer to the address to write to.
@@ -371,63 +306,24 @@ namespace KittyMemory
     Memory_Status memWrite(void *address, const void *buffer, size_t len);
 
     /**
-     * @brief Retrieves page information using vm_region_recurse_64.
+     * @brief Retrieves memory region information using vm_region_recurse_64.
      *
      * @param region Region address.
      * @param info_out Pointer to store the region information.
      * @return kern_return_t indicating the success or failure of the operation.
      */
-    kern_return_t getPageInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out);
+    kern_return_t getMemRegionInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out);
 
     /**
-     * @brief Retrieves the base executable information.
+     * @brief Resolves a relative offset to an absolute address within a loaded image.
+     *        Pass nullptr as fileName to resolve against the main executable.
      *
-     * @return MemoryFileInfo object containing the base executable information.
-     */
-    MemoryFileInfo getBaseInfo();
-
-    /**
-     * @brief Finds a memory file info by checking if the target loaded object file ends with @fileName.
-     *
-     * @param fileName Name of the target loaded object file.
-     * @return MemoryFileInfo object containing the memory file information, or an invalid object if not found.
-     */
-    MemoryFileInfo getMemoryFileInfo(const std::string &fileName);
-
-    /**
-     * @brief Retrieves the absolute address of a relative offset of a file in memory or NULL as fileName for base executable.
-     *
-     * @param fileName Name of the target file.
-     * @param address Relative offset address.
-     * @return The absolute address, or 0 if not found.
+     * @param fileName Image name suffix to search for, or nullptr for the main executable.
+     * @param address Relative offset within the image.
+     * @return Absolute address, or 0 if the image was not found.
      */
     uintptr_t getAbsoluteAddress(const char *fileName, uintptr_t address);
 
 #endif
 
 } // namespace KittyMemory
-
-#ifdef __APPLE__
-
-namespace KittyScanner
-{
-    /**
-     * @brief Finds a symbol in a memory file info based on the library and symbol name.
-     *
-     * @param info MemoryFileInfo object containing the memory file information.
-     * @param symbol Symbol name to find.
-     * @return uintptr_t representing the address of the symbol, or 0 if not found.
-     */
-    uintptr_t findSymbol(const KittyMemory::MemoryFileInfo &info, const std::string &symbol);
-
-    /**
-     * @brief Finds a symbol in a library based on the library and symbol name.
-     *
-     * @param lib Name of the library.
-     * @param symbol Symbol name to find.
-     * @return uintptr_t representing the address of the symbol, or 0 if not found.
-     */
-    uintptr_t findSymbol(const std::string &lib, const std::string &symbol);
-} // namespace KittyScanner
-
-#endif // __APPLE__

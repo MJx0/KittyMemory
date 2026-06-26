@@ -586,11 +586,11 @@ namespace KittyMemory
 
 #elif __APPLE__
 
-    kern_return_t getPageInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out)
+    kern_return_t getMemRegionInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out)
     {
         vm_size_t region_len = 0;
         mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-        unsigned int depth = 0x1000;
+        natural_t depth = 0x1000;
         return vm_region_recurse_64(mach_task_self(),
                                     &region,
                                     &region_len,
@@ -668,7 +668,7 @@ namespace KittyMemory
         size_t page_len = KT_PAGE_LEN2(address, len);
 
         vm_region_submap_short_info_64 page_info = {};
-        kern_return_t kret = getPageInfo(page_start, &page_info);
+        kern_return_t kret = getMemRegionInfo(page_start, &page_info);
         if (kret != KERN_SUCCESS)
         {
             KITTY_LOGE("memWrite err failed to get page info of address (%p) - kerror(%d).", address, kret);
@@ -736,102 +736,67 @@ namespace KittyMemory
         return KMS_SUCCESS;
     }
 
-    MemoryFileInfo getBaseInfo()
-    {
-        uint32_t exeBufSize = 1024;
-        std::vector<char> exeBuf(exeBufSize, 0);
-        if (_NSGetExecutablePath(exeBuf.data(), &exeBufSize) == -1)
-        {
-            exeBuf.clear();
-            exeBuf.resize(exeBufSize + 1, 0);
-            _NSGetExecutablePath(exeBuf.data(), &exeBufSize);
-        }
-
-        const uint32_t imageCount = _dyld_image_count();
-        int exeIdx = -1;
-
-        for (uint32_t i = 0; i < imageCount; i++)
-        {
-            const mach_header *hdr = _dyld_get_image_header(i);
-            if (!hdr || hdr->filetype != MH_EXECUTE)
-                continue;
-
-            // first executable
-            if (exeIdx == -1)
-                exeIdx = i;
-
-            const char *name = _dyld_get_image_name(i);
-            if (!name || strlen(name) != strlen(exeBuf.data()) || strcmp(name, exeBuf.data()) != 0)
-                continue;
-
-            exeIdx = i;
-            break;
-        }
-
-        MemoryFileInfo _info = {};
-
-        if (exeIdx >= 0)
-        {
-            _info.index = exeIdx;
-#ifdef __LP64__
-            _info.header = (const mach_header_64 *)_dyld_get_image_header(exeIdx);
-#else
-            _info.header = _dyld_get_image_header(exeIdx);
-#endif
-            _info.name = _dyld_get_image_name(exeIdx);
-            _info.address = _dyld_get_image_vmaddr_slide(exeIdx);
-        }
-
-        return _info;
-    }
-
-    MemoryFileInfo getMemoryFileInfo(const std::string &fileName)
-    {
-        MemoryFileInfo _info = {};
-
-        if (fileName.empty())
-            return _info;
-
-        const uint32_t imageCount = _dyld_image_count();
-
-        for (uint32_t i = 0; i < imageCount; i++)
-        {
-            const char *name = _dyld_get_image_name(i);
-            if (!name)
-                continue;
-
-            std::string fullpath(name);
-            if (!KittyUtils::String::endsWith(fullpath, fileName))
-                continue;
-
-            _info.index = i;
-#ifdef __LP64__
-            _info.header = (const mach_header_64 *)_dyld_get_image_header(i);
-#else
-            _info.header = _dyld_get_image_header(i);
-#endif
-            _info.name = _dyld_get_image_name(i);
-            _info.address = _dyld_get_image_vmaddr_slide(i);
-
-            break;
-        }
-
-        return _info;
-    }
-
     uintptr_t getAbsoluteAddress(const char *fileName, uintptr_t address)
     {
-        MemoryFileInfo info = {};
+        uintptr_t slide = 0;
 
-        if (fileName)
-            info = getMemoryFileInfo(fileName);
+        const uint32_t imageCount = _dyld_image_count();
+
+        if (!fileName)
+        {
+            uint32_t exeBufSize = 1024;
+            std::vector<char> exeBuf(exeBufSize, 0);
+            if (_NSGetExecutablePath(exeBuf.data(), &exeBufSize) == -1)
+            {
+                exeBuf.clear();
+                exeBuf.resize(exeBufSize + 1, 0);
+                _NSGetExecutablePath(exeBuf.data(), &exeBufSize);
+            }
+
+            int exeIdx = -1;
+            for (uint32_t i = 0; i < imageCount; i++)
+            {
+                const mach_header *hdr = _dyld_get_image_header(i);
+                if (!hdr || hdr->filetype != MH_EXECUTE)
+                    continue;
+
+                if (exeIdx == -1)
+                    exeIdx = i;
+
+                const char *name = _dyld_get_image_name(i);
+                if (!name || strcmp(name, exeBuf.data()) != 0)
+                    continue;
+
+                exeIdx = i;
+                break;
+            }
+
+            if (exeIdx < 0)
+                return 0;
+
+            slide = _dyld_get_image_vmaddr_slide(exeIdx);
+        }
         else
-            info = getBaseInfo();
+        {
+            for (uint32_t i = 0; i < imageCount; i++)
+            {
+                const char *name = _dyld_get_image_name(i);
+                if (!name)
+                    continue;
 
-        if (!info.address)
+                if (!KittyUtils::String::endsWith(std::string(name), fileName))
+                    continue;
+
+                slide = _dyld_get_image_vmaddr_slide(i);
+
+                break;
+            }
+        }
+        
+        if (slide == 0)
             return 0;
 
-        return info.address + address;
+        return slide + address;
     }
 
 #endif // __APPLE__
@@ -868,73 +833,5 @@ bool findMSHookMemory(void *dst, const void *src, size_t len)
 bool findMSHookMemory(void *, const void *, size_t) { return false; }
 #endif
 #endif
-
-namespace KittyScanner
-{
-    uintptr_t findSymbol(const KittyMemory::MemoryFileInfo &info, const std::string &symbol)
-    {
-        if (!info.header || !info.address || symbol.empty())
-            return 0;
-
-        uintptr_t slide = info.address;
-
-#ifdef __LP64__
-        struct mach_header_64 *header = (struct mach_header_64 *)info.header;
-        const int lc_seg = LC_SEGMENT_64;
-        struct segment_command_64 *curr_seg_cmd = nullptr;
-        struct segment_command_64 *linkedit_segment_cmd = nullptr;
-        struct symtab_command *symtab_cmd = nullptr;
-        struct nlist_64 *symtab = nullptr;
-#else
-        struct mach_header *header = (struct mach_header *)info.header;
-        const int lc_seg = LC_SEGMENT;
-        struct segment_command *curr_seg_cmd = nullptr;
-        struct segment_command *linkedit_segment_cmd = nullptr;
-        struct symtab_command *symtab_cmd = nullptr;
-        struct nlist *symtab = nullptr;
-#endif
-
-        uintptr_t curr = uintptr_t(header) + sizeof(*header);
-        for (uint32_t i = 0; i < header->ncmds; i++, curr += curr_seg_cmd->cmdsize)
-        {
-            *(uintptr_t *)&curr_seg_cmd = curr;
-
-            if (curr_seg_cmd->cmd == lc_seg && (strcmp(curr_seg_cmd->segname, SEG_LINKEDIT) == 0))
-                *(uintptr_t *)&linkedit_segment_cmd = curr;
-            else if (curr_seg_cmd->cmd == LC_SYMTAB)
-                *(uintptr_t *)&symtab_cmd = curr;
-        }
-
-        if (!linkedit_segment_cmd || !symtab_cmd)
-            return 0;
-
-        uintptr_t linkedit_base = (slide + linkedit_segment_cmd->vmaddr) - linkedit_segment_cmd->fileoff;
-        *(uintptr_t *)&symtab = (linkedit_base + symtab_cmd->symoff);
-        char *strtab = (char *)(linkedit_base + symtab_cmd->stroff);
-
-        for (uint32_t i = 0; i < symtab_cmd->nsyms; i++)
-        {
-            if (symtab[i].n_value == 0)
-                continue;
-
-            std::string curr_sym_str = std::string(strtab + symtab[i].n_un.n_strx);
-
-            // KITTY_LOGI("syms[%d] = [%{public}s, %p]", i, curr_sym_str.c_str(),
-            // (void*)symtab[i].n_value);
-
-            if (curr_sym_str.empty() || curr_sym_str != symbol)
-                continue;
-
-            return slide + symtab[i].n_value;
-        }
-
-        return 0;
-    }
-
-    uintptr_t findSymbol(const std::string &lib, const std::string &symbol)
-    {
-        return findSymbol(KittyMemory::getMemoryFileInfo(lib), symbol);
-    }
-} // namespace KittyScanner
 
 #endif // __APPLE__

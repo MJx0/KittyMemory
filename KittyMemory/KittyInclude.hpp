@@ -24,6 +24,6 @@ using KittyScanner::NativeBridgeLinker;
 
 #elif __APPLE__
 #include "writeData.hpp"
-using KittyMemory::seg_data_t;
-using KittyMemory::MemoryFileInfo;
+using KittyScanner::mem_range_info_t;
+using KittyScanner::MachOImage;
 #endif

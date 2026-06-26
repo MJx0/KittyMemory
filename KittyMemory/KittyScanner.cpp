@@ -220,6 +220,273 @@ namespace KittyScanner
         return findBytesFirst(start, end, (const char *)data, mask);
     }
 
+#ifdef __APPLE__
+
+    MachOImage MachOImage::parseImageAtIndex(uint32_t idx)
+    {
+        MachOImage _info;
+
+        _info._index = idx;
+        
+#ifdef __LP64__
+        _info._header = (const mach_header_64 *)_dyld_get_image_header(idx);
+#else
+        _info._header = _dyld_get_image_header(idx);
+#endif
+
+        if (!_info._header)
+            return _info;
+
+        _info._name = _dyld_get_image_name(idx);
+        _info._startaddress = _dyld_get_image_vmaddr_slide(idx);
+
+#ifdef __LP64__
+        const mach_header_64 *hdr = _info._header;
+        const uint32_t lc_seg = LC_SEGMENT_64;
+        using seg_cmd_t = segment_command_64;
+        using sect_t = section_64;
+#else
+        const mach_header *hdr = _info._header;
+        const uint32_t lc_seg = LC_SEGMENT;
+        using seg_cmd_t = segment_command;
+        using sect_t = section;
+#endif
+
+        const intptr_t slide = _info._startaddress;
+        uintptr_t curr = uintptr_t(hdr) + sizeof(*hdr);
+        for (uint32_t i = 0; i < hdr->ncmds; i++)
+        {
+            auto *cmd = reinterpret_cast<const load_command *>(curr);
+            if (cmd->cmd == lc_seg)
+            {
+                auto *seg = reinterpret_cast<const seg_cmd_t *>(curr);
+                char segname[17] = {};
+                strncpy(segname, seg->segname, 16);
+
+                mem_range_info_t sdata;
+                sdata.start = uintptr_t(slide + seg->vmaddr);
+                sdata.size = seg->vmsize;
+                sdata.end = sdata.start + sdata.size;
+                sdata.readable   = (seg->initprot & VM_PROT_READ)    != 0;
+                sdata.writeable  = (seg->initprot & VM_PROT_WRITE)   != 0;
+                sdata.executable = (seg->initprot & VM_PROT_EXECUTE) != 0;
+                _info._segments[segname] = sdata;
+
+                auto *sect = reinterpret_cast<const sect_t *>(seg + 1);
+                for (uint32_t j = 0; j < seg->nsects; j++, sect++)
+                {
+                    char sectname[17] = {};
+                    strncpy(sectname, sect->sectname, 16);
+
+                    std::string key = std::string(segname) + "," + sectname;
+                    mem_range_info_t secdata;
+                    secdata.start = uintptr_t(slide + sect->addr);
+                    secdata.size = sect->size;
+                    secdata.end = secdata.start + secdata.size;
+                    secdata.readable   = sdata.readable;
+                    secdata.writeable  = sdata.writeable;
+                    secdata.executable = sdata.executable;
+                    _info._sections[key] = secdata;
+                }
+            }
+            curr += cmd->cmdsize;
+        }
+
+        uintptr_t img_start = uintptr_t(_info._header);
+        uintptr_t img_end = img_start;
+        for (const auto &kv : _info._segments)
+            img_end = std::max(img_end, kv.second.end);
+
+        _info._endAddress = img_end;
+        _info._size = img_end - img_start;
+
+        return _info;
+    }
+
+    MachOImage MachOImage::findMachOImage(const char *fileName)
+    {
+        const uint32_t imageCount = _dyld_image_count();
+
+        if (!fileName)
+        {
+            uint32_t exeBufSize = 1024;
+            std::vector<char> exeBuf(exeBufSize, 0);
+            if (_NSGetExecutablePath(exeBuf.data(), &exeBufSize) == -1)
+            {
+                exeBuf.clear();
+                exeBuf.resize(exeBufSize + 1, 0);
+                _NSGetExecutablePath(exeBuf.data(), &exeBufSize);
+            }
+
+            int exeIdx = -1;
+            for (uint32_t i = 0; i < imageCount; i++)
+            {
+                const mach_header *hdr = _dyld_get_image_header(i);
+                if (!hdr || hdr->filetype != MH_EXECUTE)
+                    continue;
+
+                if (exeIdx == -1)
+                    exeIdx = i;
+
+                const char *name = _dyld_get_image_name(i);
+                if (!name || strcmp(name, exeBuf.data()) != 0)
+                    continue;
+
+                exeIdx = i;
+                break;
+            }
+
+            if (exeIdx < 0)
+                return MachOImage();
+
+            return parseImageAtIndex(exeIdx);
+        }
+
+        for (uint32_t i = 0; i < imageCount; i++)
+        {
+            const char *name = _dyld_get_image_name(i);
+            if (!name)
+                continue;
+
+            if (!KittyUtils::String::endsWith(std::string(name), fileName))
+                continue;
+
+            return parseImageAtIndex(i);
+        }
+
+        return MachOImage();
+    }
+
+    std::vector<MachOImage> MachOImage::getAllImages()
+    {
+        const uint32_t imageCount = _dyld_image_count();
+        std::vector<MachOImage> images;
+        images.reserve(imageCount);
+
+        for (uint32_t i = 0; i < imageCount; i++)
+        {
+            MachOImage info = parseImageAtIndex(i);
+            if (info._header)
+                images.push_back(info);
+        }
+
+        return images;
+    }
+
+    uintptr_t MachOImage::findSymbol(const std::string &symbol) const
+    {
+        if (!_header || !_startaddress || symbol.empty())
+            return 0;
+
+        uintptr_t slide = _startaddress;
+
+#ifdef __LP64__
+        struct mach_header_64 *hdr = (struct mach_header_64 *)_header;
+        const int lc_seg = LC_SEGMENT_64;
+        struct segment_command_64 *curr_seg_cmd = nullptr;
+        struct segment_command_64 *linkedit_segment_cmd = nullptr;
+        struct symtab_command *symtab_cmd = nullptr;
+        struct nlist_64 *symtab = nullptr;
+#else
+        struct mach_header *hdr = (struct mach_header *)_header;
+        const int lc_seg = LC_SEGMENT;
+        struct segment_command *curr_seg_cmd = nullptr;
+        struct segment_command *linkedit_segment_cmd = nullptr;
+        struct symtab_command *symtab_cmd = nullptr;
+        struct nlist *symtab = nullptr;
+#endif
+
+        uintptr_t curr = uintptr_t(hdr) + sizeof(*hdr);
+        for (uint32_t i = 0; i < hdr->ncmds; i++, curr += curr_seg_cmd->cmdsize)
+        {
+            *(uintptr_t *)&curr_seg_cmd = curr;
+
+            if (curr_seg_cmd->cmd == lc_seg && strcmp(curr_seg_cmd->segname, SEG_LINKEDIT) == 0)
+                *(uintptr_t *)&linkedit_segment_cmd = curr;
+            else if (curr_seg_cmd->cmd == LC_SYMTAB)
+                *(uintptr_t *)&symtab_cmd = curr;
+        }
+
+        if (!linkedit_segment_cmd || !symtab_cmd)
+            return 0;
+
+        uintptr_t linkedit_base = (slide + linkedit_segment_cmd->vmaddr) - linkedit_segment_cmd->fileoff;
+        *(uintptr_t *)&symtab = (linkedit_base + symtab_cmd->symoff);
+        char *strtab = (char *)(linkedit_base + symtab_cmd->stroff);
+
+        for (uint32_t i = 0; i < symtab_cmd->nsyms; i++)
+        {
+            if (symtab[i].n_value == 0)
+                continue;
+
+            const char *sym_str = strtab + symtab[i].n_un.n_strx;
+            if (sym_str && symbol == sym_str)
+                return slide + symtab[i].n_value;
+        }
+
+        return 0;
+    }
+
+    std::unordered_map<std::string, uintptr_t> MachOImage::symbols() const
+    {
+        std::unordered_map<std::string, uintptr_t> result;
+
+        if (!_header || !_startaddress)
+            return result;
+
+        uintptr_t slide = _startaddress;
+
+#ifdef __LP64__
+        struct mach_header_64 *hdr = (struct mach_header_64 *)_header;
+        const int lc_seg = LC_SEGMENT_64;
+        struct segment_command_64 *curr_seg_cmd = nullptr;
+        struct segment_command_64 *linkedit_segment_cmd = nullptr;
+        struct symtab_command *symtab_cmd = nullptr;
+        struct nlist_64 *symtab = nullptr;
+#else
+        struct mach_header *hdr = (struct mach_header *)_header;
+        const int lc_seg = LC_SEGMENT;
+        struct segment_command *curr_seg_cmd = nullptr;
+        struct segment_command *linkedit_segment_cmd = nullptr;
+        struct symtab_command *symtab_cmd = nullptr;
+        struct nlist *symtab = nullptr;
+#endif
+
+        uintptr_t curr = uintptr_t(hdr) + sizeof(*hdr);
+        for (uint32_t i = 0; i < hdr->ncmds; i++, curr += curr_seg_cmd->cmdsize)
+        {
+            *(uintptr_t *)&curr_seg_cmd = curr;
+
+            if (curr_seg_cmd->cmd == lc_seg && strcmp(curr_seg_cmd->segname, SEG_LINKEDIT) == 0)
+                *(uintptr_t *)&linkedit_segment_cmd = curr;
+            else if (curr_seg_cmd->cmd == LC_SYMTAB)
+                *(uintptr_t *)&symtab_cmd = curr;
+        }
+
+        if (!linkedit_segment_cmd || !symtab_cmd)
+            return result;
+
+        uintptr_t linkedit_base = (slide + linkedit_segment_cmd->vmaddr) - linkedit_segment_cmd->fileoff;
+        *(uintptr_t *)&symtab = (linkedit_base + symtab_cmd->symoff);
+        char *strtab = (char *)(linkedit_base + symtab_cmd->stroff);
+
+        result.reserve(symtab_cmd->nsyms);
+
+        for (uint32_t i = 0; i < symtab_cmd->nsyms; i++)
+        {
+            if (symtab[i].n_value == 0 || (symtab[i].n_type & N_STAB) != 0)
+                continue;
+
+            const char *sym_str = strtab + symtab[i].n_un.n_strx;
+            if (sym_str && sym_str[0] != '\0')
+                result[sym_str] = slide + symtab[i].n_value;
+        }
+
+        return result;
+    }
+
+#endif
+
 #ifdef __ANDROID__
 
 // for old ndk

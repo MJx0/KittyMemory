@@ -4,11 +4,11 @@
 #include <cstdint>
 #include <vector>
 #include <utility>
+#include <unordered_map>
 
 #ifdef __ANDROID__
 #include <link.h>
 #include <dlfcn.h>
-#include <unordered_map>
 #include <mutex>
 #endif
 
@@ -115,6 +115,170 @@ namespace KittyScanner
      * @return The first address where the data was found, or `0` if not found.
      */
     uintptr_t findDataFirst(const uintptr_t start, const uintptr_t end, const void *data, size_t size);
+
+#ifdef __APPLE__
+
+    /**
+     * @brief Represents a memory range with address bounds and access permissions.
+     *        Used for both Mach-O segments and sections.
+     */
+    struct mem_range_info_t
+    {
+        uintptr_t start, end;
+        unsigned long size;
+        bool readable, writeable, executable;
+        mem_range_info_t() : start(0), end(0), size(0), readable(false), writeable(false), executable(false)
+        {
+        }
+
+        /** @brief Returns true if this range was found and has a non-zero start/end address and size. */
+        inline bool isValid() const { return start != 0 && end != 0 && size != 0; }
+    };
+
+    /**
+     * @brief Represents a loaded Mach-O image with pre-populated segments, sections, and bounds.
+     */
+    class MachOImage
+    {
+    private:
+        uint32_t _index;
+#ifdef __LP64__
+        const mach_header_64 *_header;
+#else
+        const mach_header *_header;
+#endif
+        std::string _name;
+        uintptr_t _startaddress;
+        uintptr_t _endAddress;
+        size_t _size;
+
+        std::unordered_map<std::string, mem_range_info_t> _segments;
+        std::unordered_map<std::string, mem_range_info_t> _sections;
+
+        static MachOImage parseImageAtIndex(uint32_t idx);
+
+public:
+        MachOImage() : _index(0), _header(nullptr), _startaddress(0), _endAddress(0), _size(0)
+        {
+        }
+
+        /**
+         * @brief Finds a loaded Mach-O image and returns its info with segments and sections pre-populated.
+         *        Pass nullptr to get the main executable.
+         *
+         * @param fileName Suffix of the target image path to match, or nullptr for the main executable.
+         * @return MachOImage for the matched image, or a default-constructed one if not found.
+         */
+        static MachOImage findMachOImage(const char *fileName);
+
+        /**
+         * @brief Returns info for the main executable. Equivalent to getMachOImage(nullptr).
+         */
+        inline static MachOImage getMainImage()
+        {
+            return findMachOImage(nullptr);
+        }
+
+        /** @brief Returns the dyld image index of this image. */
+        inline uint32_t index() const { return _index; }
+
+        /** @brief Returns the Mach-O header pointer of this image. */
+#ifdef __LP64__
+        inline const mach_header_64 *header() const { return _header; }
+#else
+        inline const mach_header *header() const { return _header; }
+#endif
+
+        /** @brief Returns the file path of this image. */
+        inline const char *name() const { return _name.c_str(); }
+
+        /** @brief Returns the base (load) address of this image. */
+        inline uintptr_t address() const { return _startaddress; }
+
+        /** @brief Returns the end address of this image. */
+        inline uintptr_t endAddress() const { return _endAddress; }
+
+        /** @brief Returns the total size of this image in memory. */
+        inline size_t size() const { return _size; }
+
+        /** @brief Returns true if this image was successfully found and parsed. */
+        inline bool isValid() const { return _header != nullptr && _startaddress != 0; }
+
+        /** @brief Returns the __PAGEZERO segment info, or a default-constructed range if not present. */
+        inline mem_range_info_t pageZero() const { return findSegment("__PAGEZERO"); }
+
+        /**
+         * @brief Returns MachOImage for all loaded Mach-O images.
+         */
+        static std::vector<MachOImage> getAllImages();
+
+        /**
+         * @brief Returns all non-STAB symbols from this image's symbol table mapped to their resolved addresses.
+         *        Includes both exported and local symbols.
+         *
+         * @return Map of symbol name to absolute address.
+         */
+        std::unordered_map<std::string, uintptr_t> symbols() const;
+
+        /**
+         * @brief Finds the address of a symbol in this image's symbol table.
+         *
+         * @param symbol Symbol name to find.
+         * @return Address of the symbol, or 0 if not found.
+         */
+        uintptr_t findSymbol(const std::string &symbol) const;
+
+        /**
+         * @brief Returns all segments keyed by segment name (e.g. "__TEXT").
+         */
+        inline const std::unordered_map<std::string, mem_range_info_t> &segments() const
+        {
+            return _segments;
+        }
+
+        /**
+         * @brief Returns all sections keyed by "segname,sectname" (e.g. "__TEXT,__text").
+         */
+        inline const std::unordered_map<std::string, mem_range_info_t> &sections() const
+        {
+            return _sections;
+        }
+
+        /**
+         * @brief Retrieves a segment's range and permissions by name from the cached map.
+         *
+         * @param seg_name Segment name (e.g. "__TEXT").
+         * @return mem_range_info_t with bounds and permissions, or a default-constructed one if not found.
+         */
+        inline mem_range_info_t findSegment(const char *seg_name) const
+        {
+            if (!seg_name)
+                return mem_range_info_t();
+            auto it = _segments.find(seg_name);
+            if (it == _segments.end())
+                return mem_range_info_t();
+            return it->second;
+        }
+
+        /**
+         * @brief Retrieves a section's range and permissions by segment and section name from the cached map.
+         *
+         * @param seg_name Segment name (e.g. "__TEXT").
+         * @param sect_name Section name (e.g. "__text").
+         * @return mem_range_info_t with bounds and permissions, or a default-constructed one if not found.
+         */
+        inline mem_range_info_t findSection(const char *seg_name, const char *sect_name) const
+        {
+            if (!seg_name || !sect_name)
+                return mem_range_info_t();
+            auto it = _sections.find(std::string(seg_name) + "," + sect_name);
+            if (it == _sections.end())
+                return mem_range_info_t();
+            return it->second;
+        }
+    };
+
+#endif
 
 #ifdef __ANDROID__
     /**
