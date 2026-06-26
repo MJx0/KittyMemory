@@ -238,7 +238,7 @@ namespace KittyScanner
             return _info;
 
         _info._name = _dyld_get_image_name(idx);
-        _info._startaddress = _dyld_get_image_vmaddr_slide(idx);
+        _info._slide = _dyld_get_image_vmaddr_slide(idx);
 
 #ifdef __LP64__
         const mach_header_64 *hdr = _info._header;
@@ -252,7 +252,7 @@ namespace KittyScanner
         using sect_t = section;
 #endif
 
-        const intptr_t slide = _info._startaddress;
+        const intptr_t slide = _info._slide;
         uintptr_t curr = uintptr_t(hdr) + sizeof(*hdr);
         for (uint32_t i = 0; i < hdr->ncmds; i++)
         {
@@ -375,10 +375,10 @@ namespace KittyScanner
 
     uintptr_t MachOImage::findSymbol(const std::string &symbol) const
     {
-        if (!_header || !_startaddress || symbol.empty())
+        if (!_header || !_slide || symbol.empty())
             return 0;
 
-        uintptr_t slide = _startaddress;
+        uintptr_t slide = _slide;
 
 #ifdef __LP64__
         struct mach_header_64 *hdr = (struct mach_header_64 *)_header;
@@ -431,10 +431,10 @@ namespace KittyScanner
     {
         std::unordered_map<std::string, uintptr_t> result;
 
-        if (!_header || !_startaddress)
+        if (!_header || !_slide)
             return result;
 
-        uintptr_t slide = _startaddress;
+        uintptr_t slide = _slide;
 
 #ifdef __LP64__
         struct mach_header_64 *hdr = (struct mach_header_64 *)_header;

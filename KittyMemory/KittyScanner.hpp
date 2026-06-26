@@ -148,7 +148,7 @@ namespace KittyScanner
         const mach_header *_header;
 #endif
         std::string _name;
-        uintptr_t _startaddress;
+        uintptr_t _slide;
         uintptr_t _endAddress;
         size_t _size;
 
@@ -158,7 +158,7 @@ namespace KittyScanner
         static MachOImage parseImageAtIndex(uint32_t idx);
 
 public:
-        MachOImage() : _index(0), _header(nullptr), _startaddress(0), _endAddress(0), _size(0)
+        MachOImage() : _index(0), _header(nullptr), _slide(0), _endAddress(0), _size(0)
         {
         }
 
@@ -179,6 +179,11 @@ public:
             return findMachOImage(nullptr);
         }
 
+        /**
+         * @brief Returns MachOImage for all loaded Mach-O images.
+         */
+        static std::vector<MachOImage> getAllImages();
+
         /** @brief Returns the dyld image index of this image. */
         inline uint32_t index() const { return _index; }
 
@@ -192,25 +197,23 @@ public:
         /** @brief Returns the file path of this image. */
         inline const char *name() const { return _name.c_str(); }
 
-        /** @brief Returns the base (load) address of this image. */
-        inline uintptr_t address() const { return _startaddress; }
+        /** @brief Returns the start address of this image. */
+        inline uintptr_t start() const { return reinterpret_cast<uintptr_t>(_header); }
 
         /** @brief Returns the end address of this image. */
-        inline uintptr_t endAddress() const { return _endAddress; }
+        inline uintptr_t end() const { return _endAddress; }
 
         /** @brief Returns the total size of this image in memory. */
         inline size_t size() const { return _size; }
 
+        /** @brief Returns the slide address of this image. */
+        inline uintptr_t slide() const { return _slide; }
+
         /** @brief Returns true if this image was successfully found and parsed. */
-        inline bool isValid() const { return _header != nullptr && _startaddress != 0; }
+        inline bool isValid() const { return _header != nullptr && _slide != 0; }
 
         /** @brief Returns the __PAGEZERO segment info, or a default-constructed range if not present. */
         inline mem_range_info_t pageZero() const { return findSegment("__PAGEZERO"); }
-
-        /**
-         * @brief Returns MachOImage for all loaded Mach-O images.
-         */
-        static std::vector<MachOImage> getAllImages();
 
         /**
          * @brief Returns all non-STAB symbols from this image's symbol table mapped to their resolved addresses.
