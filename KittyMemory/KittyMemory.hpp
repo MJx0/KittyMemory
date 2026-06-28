@@ -312,7 +312,7 @@ namespace KittyMemory
      * @param info_out Pointer to store the region information.
      * @return kern_return_t indicating the success or failure of the operation.
      */
-    kern_return_t getMemRegionInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out);
+    kern_return_t getMemRegionInfo(mach_vm_address_t region, vm_region_submap_short_info_64 *info_out);
 
     /**
      * @brief Resolves a relative offset to an absolute address within a loaded image.

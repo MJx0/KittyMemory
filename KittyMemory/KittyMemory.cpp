@@ -22,6 +22,13 @@ extern "C"
                                          mach_vm_size_t size,
                                          mach_vm_address_t data,
                                          mach_vm_size_t *outsize);
+
+    kern_return_t mach_vm_region_recurse(vm_map_read_t target_task,
+                                         mach_vm_address_t *address,
+                                         mach_vm_size_t *size,
+                                         natural_t *nesting_depth,
+                                         vm_region_recurse_info_t info,
+                                         mach_msg_type_number_t *infoCnt);
 }
 #endif
 
@@ -586,17 +593,31 @@ namespace KittyMemory
 
 #elif __APPLE__
 
-    kern_return_t getMemRegionInfo(vm_address_t region, vm_region_submap_short_info_64 *info_out)
+    kern_return_t getMemRegionInfo(mach_vm_address_t region, vm_region_submap_short_info_64 *info_out)
     {
-        vm_size_t region_len = 0;
+        mach_vm_address_t search_address = region; 
+        mach_vm_size_t region_size = 0;
+        natural_t nesting_depth = 99;
+        vm_region_submap_short_info_data_64_t info{};
         mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-        natural_t depth = 0x1000;
-        return vm_region_recurse_64(mach_task_self(),
+        kern_return_t kret = mach_vm_region_recurse(mach_task_self(),
                                     &region,
-                                    &region_len,
-                                    &depth,
-                                    (vm_region_recurse_info_t)info_out,
+                                    &region_size,
+                                    &nesting_depth,
+                                    (vm_region_recurse_info_t)&info,
                                     &info_count);
+
+        if (kret != KERN_SUCCESS)
+            return kret;
+
+        // Ensure the kernel didn't jump past our target address due to an unmapped gap
+        if (region < search_address || region >= (search_address + region_size))
+            return KERN_INVALID_ADDRESS;
+
+        if (info_out)
+            *info_out = info;
+
+        return KERN_SUCCESS;
     }
 
     bool memRead(const void *address, void *buffer, size_t len)

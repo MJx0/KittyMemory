@@ -2,16 +2,25 @@
 
 #ifdef __APPLE__
 
+extern "C" kern_return_t mach_vm_region_recurse(
+    vm_map_read_t target_task,
+    mach_vm_address_t *address,
+    mach_vm_size_t *size,
+    natural_t *nesting_depth,
+    vm_region_recurse_info_t info,
+    mach_msg_type_number_t *infoCnt
+);
+
 bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
 {
     if (!use_cache_)
     {
-        vm_address_t address = addr & ~(page_size_ - 1);
-        vm_size_t size = 0;
-        natural_t nesting_depth = 0;
+        mach_vm_address_t address = addr & ~(page_size_ - 1);
+        mach_vm_size_t size = 0;
+        natural_t nesting_depth = 99;
         vm_region_submap_short_info_data_64_t info{};
         mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-        kern_return_t kret = vm_region_recurse_64(task_,
+        kern_return_t kret = mach_vm_region_recurse(task_,
                                                   &address,
                                                   &size,
                                                   &nesting_depth,
@@ -20,10 +29,17 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
         if (kret != KERN_SUCCESS)
             return false;
 
+        // Ensure the kernel didn't jump past our target address due to an unmapped gap
+        if (addr < address || addr >= (address + size))
+            return false;
+
         bool readable = (info.protection & VM_PROT_READ) != 0;
         bool writable = (info.protection & VM_PROT_WRITE) != 0;
         bool executable = (info.protection & VM_PROT_EXECUTE) != 0;
-        *region = RegionInfo(address, address + size, readable, writable, executable);
+
+        if (region)
+            *region = RegionInfo(address, address + size, readable, writable, executable);
+        
         return address <= addr && addr < address + size;
     }
 
@@ -69,15 +85,15 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
 void KittyPtrValidator::refreshRegionCache()
 {
     cachedRegions_.clear();
-    vm_address_t address = 0;
+    mach_vm_address_t address = 0;
 
     while (true)
     {
-        vm_size_t size = 0;
-        natural_t nesting_depth = 0;
+        mach_vm_size_t size = 0;
+        natural_t nesting_depth = 99;
         vm_region_submap_short_info_data_64_t info{};
         mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-        kern_return_t kret = vm_region_recurse_64(task_,
+        kern_return_t kret = mach_vm_region_recurse(task_,
                                                   &address,
                                                   &size,
                                                   &nesting_depth,
