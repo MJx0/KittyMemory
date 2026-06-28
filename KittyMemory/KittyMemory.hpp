@@ -344,10 +344,10 @@ namespace KittyMemory
      * @param address Starting address of the memory range.
      * @param buffer Pointer to the buffer for data transfer.
      * @param len Length of the data transfer.
-     * @return Number of bytes transferred.
+     * @return true if successful.
      */
-    size_t syscallMemWrite(uintptr_t address, void *buffer, size_t len);
-    inline size_t syscallMemWrite(void *address, void *buffer, size_t len)
+    bool syscallMemWrite(uintptr_t address, void *buffer, size_t len);
+    inline bool syscallMemWrite(void *address, void *buffer, size_t len)
     {
         return syscallMemWrite(uintptr_t(address), buffer, len);
     }

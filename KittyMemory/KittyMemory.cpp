@@ -880,7 +880,7 @@ namespace KittyMemory
         return bytes_read_total;
     }
 
-    size_t syscallMemWrite(uintptr_t address, void *buffer, size_t len)
+    bool syscallMemWrite(uintptr_t address, void *buffer, size_t len)
     {
         if (!address || !buffer || !len)
             return false;
