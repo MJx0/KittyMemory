@@ -324,6 +324,34 @@ namespace KittyMemory
      */
     uintptr_t getAbsoluteAddress(const char *fileName, uintptr_t address);
 
+    /**
+     * @brief Performs a memory read operation using mach_vm_read_overwrite.
+     *
+     * @param address Starting address of the memory range.
+     * @param buffer Pointer to the buffer for data transfer.
+     * @param len Length of the data transfer.
+     * @return Number of bytes transferred.
+     */
+    size_t syscallMemRead(uintptr_t address, void *buffer, size_t len);
+    inline size_t syscallMemRead(void *address, void *buffer, size_t len)
+    {
+        return syscallMemRead(uintptr_t(address), buffer, len);
+    }
+
+    /**
+     * @brief Performs a memory write operation using mach_vm_write.
+     *
+     * @param address Starting address of the memory range.
+     * @param buffer Pointer to the buffer for data transfer.
+     * @param len Length of the data transfer.
+     * @return Number of bytes transferred.
+     */
+    size_t syscallMemWrite(uintptr_t address, void *buffer, size_t len);
+    inline size_t syscallMemWrite(void *address, void *buffer, size_t len)
+    {
+        return syscallMemWrite(uintptr_t(address), buffer, len);
+    }
+
 #endif
 
 } // namespace KittyMemory

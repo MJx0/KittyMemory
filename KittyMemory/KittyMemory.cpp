@@ -820,6 +820,77 @@ namespace KittyMemory
         return slide + address;
     }
 
+    size_t syscallMemRead(uintptr_t address, void *buffer, size_t len)
+    {
+        if (!address || !buffer || !len)
+            return 0;
+
+        const mach_port_t task = mach_task_self();
+        size_t bytes_read_total = 0;
+        size_t remaining = len;
+
+        uint8_t *local_ptr = reinterpret_cast<uint8_t *>(buffer);
+        mach_vm_address_t remote_ptr = static_cast<mach_vm_address_t>(address);
+
+        bool page_mode = false;
+
+        do
+        {
+            size_t chunk_size = remaining;
+            if (page_mode)
+            {
+                chunk_size = std::min(KT_PAGE_LEN(remote_ptr), remaining);
+            }
+
+            mach_vm_size_t bytes_read_chunk = 0;
+            kern_return_t kr = mach_vm_read_overwrite(task,
+                                                      remote_ptr,
+                                                      chunk_size,
+                                                      reinterpret_cast<mach_vm_address_t>(local_ptr),
+                                                      &bytes_read_chunk);
+
+            if (kr == KERN_SUCCESS && bytes_read_chunk > 0)
+            {
+                remaining -= bytes_read_chunk;
+                bytes_read_total += bytes_read_chunk;
+                local_ptr += bytes_read_chunk;
+                remote_ptr += bytes_read_chunk;
+
+                // If we didn't read the full requested chunk, enter page mode
+                page_mode = (bytes_read_chunk != chunk_size);
+            }
+            else
+            {
+                if (page_mode)
+                {
+                    // In page mode, skip this bad page block entirely and move forward
+                    remaining -= chunk_size;
+                    local_ptr += chunk_size;
+                    remote_ptr += chunk_size;
+                }
+                else
+                {
+                    // Normal large read failed, drop down to page-by-page scanning
+                    page_mode = true;
+                }
+            }
+
+        } while (remaining > 0);
+
+        return bytes_read_total;
+    }
+
+    size_t syscallMemWrite(uintptr_t address, void *buffer, size_t len)
+    {
+        if (!address || !buffer || !len)
+            return false;
+
+        return mach_vm_write(mach_task_self(),
+                             static_cast<mach_vm_address_t>(address),
+                             reinterpret_cast<vm_offset_t>(buffer),
+                             static_cast<mach_msg_type_number_t>(len)) == KERN_SUCCESS;
+    }
+
 #endif // __APPLE__
 
 } // namespace KittyMemory
