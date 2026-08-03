@@ -2,15 +2,15 @@
 
 <h3>This is an example android shared lib.</h3>
 
-Requires C++17 or above.</br>
-Android API 21 or above for keystone linking.
+Requires C++17 or newer.</br>
+Android API 21 or newer.
 
 See how to use KittyMemory in [example.cpp](example.cpp).
 
 <h3>Clone:</h3>
 
 ```
-git clone --recursive https://github.com/MJx0/KittyMemory.git
+git clone https://github.com/MJx0/KittyMemory.git
 ```
 
 <h3>How to build:</h3>

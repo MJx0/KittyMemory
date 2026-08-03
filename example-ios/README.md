@@ -2,14 +2,14 @@
 
 <h3>This is an example theos tweak.</h3>
 
-Requires C++11 or above.
+Requires C++17 or above.
 
 See how to use KittyMemory in [Tweak.mm](Tweak.mm).
 
 <h3>Clone:</h3>
 
 ```
-git clone --recursive https://github.com/MJx0/KittyMemory.git
+git clone https://github.com/MJx0/KittyMemory.git
 ```
 
 <h3>How to build:</h3>
