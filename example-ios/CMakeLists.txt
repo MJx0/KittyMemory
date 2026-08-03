@@ -1,49 +1,39 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.21)
 
-project(ExampleProject
-    VERSION 1.0
-    LANGUAGES CXX
-)
+project(ExampleProject LANGUAGES C CXX OBJCXX)
 
 # -----------------------------
 # Options
 # -----------------------------
-option(KT_DISABLE_KEYSTONE "Disable keystone support" OFF)
+option(NO_KEYSTONE "Disable Keystone support" OFF)
 
 # -----------------------------
 # C++ standard
 # -----------------------------
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# -----------------------------
-# KittyMemory library
-# -----------------------------
+# ============================================================================
+# KittyMemory
+# ============================================================================
 set(KITTYMEMORY_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../KittyMemory")
-file(GLOB KITTYMEMORY_SRC "${KITTYMEMORY_PATH}/*.cpp")
-set(KEYSTONE_LIB ${KITTYMEMORY_PATH}/Deps/Keystone/libs-android/${CMAKE_ANDROID_ARCH_ABI}/libkeystone.a)
+set(KEYSTONE_LIB "${KITTYMEMORY_PATH}/Deps/Keystone/libs-ios/${CMAKE_OSX_ARCHITECTURES}/libkeystone.a")
 
 # -----------------------------
 # Project sources
 # -----------------------------
-file(GLOB PROJ_SRC
-    "example.cpp"
+file(GLOB KITTYMEMORY_SRC
+    "${KITTYMEMORY_PATH}/*.cpp"
 )
 
 # -----------------------------
 # Shared Library
 # -----------------------------
-add_library(ExampleProject SHARED ${PROJ_SRC} ${KITTYMEMORY_SRC})
-
-
-# -----------------------------
-# Includes
-# -----------------------------
-target_include_directories(ExampleProject
-    PRIVATE
-        ${KITTYMEMORY_PATH}
+add_library(ExampleProject SHARED
+    Tweak.mm
+    ${KITTYMEMORY_SRC}
 )
 
 # -----------------------------
@@ -63,6 +53,7 @@ target_compile_options(ExampleProject
     PRIVATE
         $<$<CONFIG:Debug>:-O0 -g>
         $<$<CONFIG:Release>:-O2>
+        -fobjc-arc
         -Wall
         -Wextra
         -Werror
@@ -73,6 +64,13 @@ target_compile_options(ExampleProject
 # -----------------------------
 # Platform-specific libraries
 # -----------------------------
-if(ANDROID)
-    target_link_libraries(ExampleProject PRIVATE log $<$<NOT:$<BOOL:${KT_DISABLE_KEYSTONE}>>:${KEYSTONE_LIB}>)
-endif()
+target_link_libraries(ExampleProject PRIVATE "-framework Foundation -framework UIKit" $<$<NOT:$<BOOL:${KT_DISABLE_KEYSTONE}>>:${KEYSTONE_LIB}>)
+set_target_properties(ExampleProject PROPERTIES
+        XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "14.0"
+    )
+
+# ============================================================================
+# Architectures / Deployment Target
+# ============================================================================
+set(CMAKE_OSX_ARCHITECTURES "arm64;arm64e" CACHE STRING "" FORCE)
+set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "" FORCE)
