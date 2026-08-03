@@ -1,5 +1,4 @@
 ---
-Language:        Cpp
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
 AlignConsecutiveMacros: None
@@ -132,4 +131,3 @@ StatementMacros:
 TabWidth:        4
 UseCRLF:         false
 UseTab:          Never
-...
