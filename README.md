@@ -1,6 +1,6 @@
 # KittyMemory
 
-KittyMemory is a native C++ library for runtime memory patching, scanning, dumping, and module (ELF / Mach-O) introspection, targeting **Android** and **iOS**. It operates on the **current process**.
+KittyMemory is a native C++ library for runtime memory patching, scanning, dumping, and module (ELF / Mach-O) introspection, targeting **Android** and **iOS**.
 
 ## Features
 
