@@ -31,7 +31,7 @@ MemoryBackup MemoryBackup::createBackup(uintptr_t absolute_address, size_t backu
     backup._orig_code.resize(backup_size);
 
     // backup current content
-    KittyMemory::memRead(reinterpret_cast<const void *>(backup._address), &backup._orig_code[0], backup_size);
+    KittyMemory::memRead(backup._address, &backup._orig_code[0], backup_size);
 
     return backup;
 }
@@ -57,9 +57,9 @@ bool MemoryBackup::Restore()
         return false;
 
 #ifdef __ANDROID__
-    return KittyMemory::memWrite(reinterpret_cast<void *>(_address), &_orig_code[0], _size);
+    return KittyMemory::memWrite(_address, &_orig_code[0], _size);
 #elif __APPLE__
-    return KittyMemory::memWrite(reinterpret_cast<void *>(_address), &_orig_code[0], _size) == KittyMemory::KMS_SUCCESS;
+    return KittyMemory::memWrite(_address, &_orig_code[0], _size);
 #endif
 }
 

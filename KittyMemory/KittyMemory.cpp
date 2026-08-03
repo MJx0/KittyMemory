@@ -1,9 +1,6 @@
 #include "KittyMemory.hpp"
 
 #ifdef __APPLE__
-#if 0
-bool findMSHookMemory(void *dst, const void *src, size_t len);
-#endif
 extern "C"
 {
     kern_return_t mach_vm_protect(vm_map_t target_task,
@@ -29,6 +26,10 @@ extern "C"
                                          natural_t *nesting_depth,
                                          vm_region_recurse_info_t info,
                                          mach_msg_type_number_t *infoCnt);
+
+    int proc_regionfilename(int pid, uint64_t address, void *buffer, uint32_t buffersize);
+
+#define KT_PROC_PIDPATHINFO_MAXSIZE 4096
 }
 #endif
 
@@ -36,191 +37,6 @@ namespace KittyMemory
 {
 
 #ifdef __ANDROID__
-
-    int memProtect(const void *address, size_t length, int protection)
-    {
-        uintptr_t pageStart = KT_PAGE_START(address);
-        size_t pageLen = KT_PAGE_LEN2(address, length);
-        int ret = mprotect(reinterpret_cast<void *>(pageStart), pageLen, protection);
-        KITTY_LOGD("%s", getAddressMap(pageStart).toString().c_str());
-        return ret;
-    }
-
-    bool memRead(const void *address, void *buffer, size_t len)
-    {
-        KITTY_LOGD("memRead(%p, %p, %zu)", address, buffer, len);
-
-        if (!address)
-        {
-            KITTY_LOGE("memRead err address (%p) is null", address);
-            return false;
-        }
-
-        if (!buffer)
-        {
-            KITTY_LOGE("memRead err buffer (%p) is null", buffer);
-            return false;
-        }
-
-        if (!len)
-        {
-            KITTY_LOGE("memRead err invalid len");
-            return false;
-        }
-
-        ProcMap addressMap = getAddressMap(address);
-        if (!addressMap.isValid())
-        {
-            KITTY_LOGE("memRead err couldn't find address (%p) in any map", address);
-            return false;
-        }
-
-        if (addressMap.protection & PROT_READ)
-        {
-            memcpy(buffer, address, len);
-            return true;
-        }
-
-        if (memProtect(address, len, addressMap.protection | PROT_READ) != 0)
-        {
-            KITTY_LOGE("memRead err couldn't add write perm to address (%p, len: %zu, prot: %d)",
-                       address,
-                       len,
-                       addressMap.protection);
-            return false;
-        }
-
-        memcpy(buffer, address, len);
-
-        if (memProtect(address, len, addressMap.protection) != 0)
-        {
-            KITTY_LOGE("memRead err couldn't revert protection of address (%p, len: %zu, prot: %d)",
-                       address,
-                       len,
-                       addressMap.protection);
-            return false;
-        }
-
-        return true;
-    }
-
-    bool memWrite(void *address, const void *buffer, size_t len)
-    {
-        KITTY_LOGD("memWrite(%p, %p, %zu)", address, buffer, len);
-
-        if (!address)
-        {
-            KITTY_LOGE("memWrite err address (%p) is null", address);
-            return false;
-        }
-
-        if (!buffer)
-        {
-            KITTY_LOGE("memWrite err buffer (%p) is null", buffer);
-            return false;
-        }
-
-        if (!len)
-        {
-            KITTY_LOGE("memWrite err invalid len");
-            return false;
-        }
-
-        ProcMap addressMap = getAddressMap(address);
-        if (!addressMap.isValid())
-        {
-            KITTY_LOGE("memWrite err couldn't find address (%p) in any map", address);
-            return false;
-        }
-
-        if (addressMap.protection & PROT_WRITE)
-        {
-            memcpy(address, buffer, len);
-            return true;
-        }
-
-        if (memProtect(address, len, addressMap.protection | PROT_WRITE) != 0)
-        {
-            KITTY_LOGE("memWrite err couldn't add write perm to address (%p, len: %zu, prot: %d)",
-                       address,
-                       len,
-                       addressMap.protection | PROT_WRITE);
-            return false;
-        }
-
-        memcpy(address, buffer, len);
-
-        if (memProtect(address, len, addressMap.protection) != 0)
-        {
-            KITTY_LOGE("memWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)",
-                       address,
-                       len,
-                       addressMap.protection);
-            return false;
-        }
-
-        return true;
-    }
-
-    bool memExecWrite(void *address, const void *buffer, size_t len)
-    {
-        KITTY_LOGD("memExecWrite(%p, %p, %zu)", address, buffer, len);
-
-        if (!address)
-        {
-            KITTY_LOGE("memExecWrite err address (%p) is null", address);
-            return false;
-        }
-
-        if (!buffer)
-        {
-            KITTY_LOGE("memExecWrite err buffer (%p) is null", buffer);
-            return false;
-        }
-
-        if (!len)
-        {
-            KITTY_LOGE("memExecWrite err invalid len");
-            return false;
-        }
-
-        ProcMap addressMap = getAddressMap(address);
-        if (!addressMap.isValid())
-        {
-            KITTY_LOGE("memExecWrite err couldn't find address (%p) in any map", address);
-            return false;
-        }
-
-        if (addressMap.protection & PROT_WRITE)
-        {
-            memcpy(address, buffer, len);
-            return true;
-        }
-
-        if (memProtect(address, len, KT_PROT_RWX) != 0)
-        {
-            KITTY_LOGE("memExecWrite err couldn't add write perm to address (%p, len: %zu, prot: %d)",
-                       address,
-                       len,
-                       KT_PROT_RWX);
-            return false;
-        }
-
-        memcpy(address, buffer, len);
-
-        if (memProtect(address, len, KT_PROT_RX) != 0)
-        {
-            KITTY_LOGE("memExecWrite err couldn't revert protection of address (%p, len: %zu, prot: %d)",
-                       address,
-                       len,
-                       KT_PROT_RX);
-            return false;
-        }
-
-        __builtin___clear_cache((char *)address, (char *)address + len);
-
-        return true;
-    }
 
     std::string getProcessName()
     {
@@ -258,7 +74,7 @@ namespace KittyMemory
             // parse a line in maps file
             // (format) startAddress-endAddress perms offset dev inode pathname
             sscanf(line,
-                   "%" SCNxPTR "-%" SCNxPTR " %4s %" SCNxPTR " %s %lu %s",
+                   "%" SCNxPTR "-%" SCNxPTR " %4s %" SCNxPTR " %s %" SCNu64 " %s",
                    &map.startAddress,
                    &map.endAddress,
                    perms,
@@ -305,7 +121,7 @@ namespace KittyMemory
         }
         else
         {
-            std::sort(retMaps.begin(), retMaps.end(), [](const KittyMemory::ProcMap &a, const KittyMemory::ProcMap &b) {
+            std::sort(retMaps.begin(), retMaps.end(), [](const ProcMap &a, const ProcMap &b) {
                 return a.startAddress < b.startAddress;
             });
         }
@@ -363,12 +179,12 @@ namespace KittyMemory
         return retMaps;
     }
 
-    ProcMap getAddressMap(const void *address, const std::vector<ProcMap> &maps)
+    ProcMap getAddressMap(uintptr_t address, const std::vector<ProcMap> &maps)
     {
         if (!address)
             return {};
 
-        uintptr_t p = KittyUtils::untagHeepPtr(uintptr_t(address));
+        uintptr_t p = KittyUtils::untagPointer(address);
 
         auto it = std::lower_bound(maps.begin(), maps.end(), p, [](const ProcMap &m, uintptr_t val) {
             return m.endAddress <= val;
@@ -382,118 +198,368 @@ namespace KittyMemory
         return {};
     }
 
-    bool dumpMemToDisk(uintptr_t address, size_t size, const std::string &destination)
+    std::vector<std::vector<ProcMap>> getFileMappings(const std::string &path, const std::vector<ProcMap> &maps)
     {
-        if (!address || !size || destination.empty())
+        auto matched_maps = getMaps(EProcMapFilter::EndWith, path, maps);
+        if (matched_maps.empty())
+            return {};
+
+        std::sort(matched_maps.begin(), matched_maps.end(), [](const auto &a, const auto &b) {
+            return a.startAddress < b.startAddress;
+        });
+
+        std::vector<std::vector<ProcMap>> mappings;
+        mappings.emplace_back();
+        mappings.back().push_back(matched_maps.front());
+
+        uint64_t expectedNextOffset = matched_maps.front().offset + matched_maps.front().length;
+
+        for (size_t i = 1; i < matched_maps.size(); ++i)
+        {
+            const auto &prev = mappings.back().back();
+            const auto &r = matched_maps[i];
+
+            const bool contiguousVA = (r.startAddress == prev.endAddress);
+            const bool contiguousFile = (r.offset == expectedNextOffset);
+
+            if (contiguousVA && contiguousFile)
+            {
+                mappings.back().push_back(r);
+                expectedNextOffset += r.length;
+            }
+            else
+            {
+                mappings.emplace_back();
+                mappings.back().push_back(r);
+                expectedNextOffset = r.offset + r.length;
+            }
+        }
+
+        return mappings;
+    }
+
+    bool memProtect(uintptr_t address, size_t length, int protection)
+    {
+        uintptr_t pageStart = KT_PAGE_START(address);
+        size_t pageLen = KT_PAGE_REMAIN2(address, length);
+        int ret = KT_EINTR_RETRY(mprotect(reinterpret_cast<void *>(pageStart), pageLen, protection));
+        return ret == 0;
+    }
+
+    template <typename T>
+    static bool memPatch(uintptr_t address, void *buffer, size_t len, int requiredProt, T &&operation)
+    {
+        if (!address || !buffer || !len)
             return false;
 
-        address = KittyUtils::untagHeepPtr(address);
+        uintptr_t current = address;
+        uintptr_t end = address + len;
+
+        if (end <= current)
+            return false;
+
+        while (current < end)
+        {
+            ProcMap map = getAddressMap(current);
+            if (!map.isValid())
+                return false;
+
+            size_t chunk = std::min<size_t>(map.endAddress - current, end - current);
+
+            int oldProt = map.protection;
+            bool restoreProtection = false;
+            bool permissionGranted = (oldProt & requiredProt);
+
+            if (!permissionGranted)
+            {
+                int newProt = oldProt | requiredProt;
+                if (memProtect(current, chunk, newProt))
+                {
+                    permissionGranted = true;
+                    restoreProtection = true;
+                }
+            }
+
+            bool ok = operation(current, buffer, chunk, permissionGranted);
+
+            if (restoreProtection)
+            {
+                int restoreProt = oldProt;
+                if (requiredProt & PROT_EXEC)
+                    restoreProt |= PROT_EXEC;
+
+                memProtect(current, chunk, restoreProt);
+            }
+
+            if (!ok)
+                return false;
+
+            if (permissionGranted && (requiredProt & PROT_WRITE) &&
+                ((oldProt & PROT_EXEC) || (requiredProt & PROT_EXEC)))
+            {
+                __builtin___clear_cache((char *)current, (char *)current + chunk);
+            }
+
+            current += chunk;
+            buffer = static_cast<uint8_t *>(buffer) + chunk;
+        }
+
+        return true;
+    }
+
+    bool memRead(uintptr_t address, void *buffer, size_t len)
+    {
+        KITTY_LOGD("memRead(%p, %p, %zu)", (void *)address, buffer, len);
+
+        if (!address || !buffer || !len)
+            return false;
+
+        return memPatch(address,
+                        buffer,
+                        len,
+                        PROT_READ,
+                        [](uintptr_t addr, void *buf, size_t size, bool permissionGranted) -> bool {
+                            if (!permissionGranted)
+                                return false;
+                            return memcpy(buf, reinterpret_cast<void *>(addr), size);
+                        });
+    }
+
+    bool memWrite(uintptr_t address, const void *buffer, size_t len)
+    {
+        KITTY_LOGD("memWrite(%p, %p, %zu)", (void *)address, buffer, len);
+
+        if (!address || !buffer || !len)
+            return false;
+
+        return memPatch(address,
+                        const_cast<void *>(buffer),
+                        len,
+                        PROT_WRITE,
+                        [](uintptr_t addr, void *buf, size_t size, bool permissionGranted) -> bool {
+                            if (!permissionGranted)
+                                return false;
+                            return memcpy(reinterpret_cast<void *>(addr), buf, size);
+                        });
+    }
+
+    bool memExecWrite(uintptr_t address, const void *buffer, size_t len)
+    {
+        KITTY_LOGD("memExecWrite(%p, %p, %zu)", (void *)address, buffer, len);
+
+        if (!address || !buffer || !len)
+            return false;
+
+        return memPatch(address,
+                        const_cast<void *>(buffer),
+                        len,
+                        PROT_WRITE | PROT_EXEC,
+                        [](uintptr_t addr, void *buf, size_t size, bool permissionGranted) -> bool {
+                            if (!permissionGranted)
+                                return false;
+                            return memcpy(reinterpret_cast<void *>(addr), buf, size);
+                        });
+    }
+
+    bool dumpMemToDisk(uintptr_t address, size_t size, const std::string &destination, const std::vector<ProcMap> &maps)
+    {
+        if (!address || !size || destination.empty() || maps.empty())
+            return false;
+
+        address = KittyUtils::untagPointer(address);
         uintptr_t endAddress = address + size;
-        auto allMaps = getAllMaps();
+        if (endAddress < address)
+            return false;
 
         KittyIOFile dest(destination, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
         if (!dest.open())
             return false;
 
-        uintptr_t currentPos = address;
+        std::vector<char> zeroBuffer(0x10000, 0);
+        auto fillZeros = [&](size_t count) -> bool {
+            while (count)
+            {
+                size_t chunk = std::min(count, zeroBuffer.size());
+                ssize_t written = dest.write(zeroBuffer.data(), chunk);
+                if (written != (ssize_t)chunk)
+                    return false;
 
-        std::vector<char> zeroBuf;
-        auto fillWithZeros = [&](size_t count) {
-            if (count == 0)
-                return;
-            if (zeroBuf.size() < count)
-                zeroBuf.resize(count, 0);
-            dest.write(zeroBuf.data(), count);
+                count -= chunk;
+            }
+
+            return true;
         };
 
-        for (const auto &it : allMaps)
+        uintptr_t current = address;
+
+        for (const auto &map : maps)
         {
-            if (it.endAddress <= currentPos)
+            if (map.endAddress <= current)
                 continue;
 
-            if (it.startAddress >= endAddress)
+            if (map.startAddress >= endAddress)
                 break;
 
-            if (it.startAddress > currentPos)
+            /*
+             * Hole between mappings.
+             */
+            if (map.startAddress > current)
             {
-                fillWithZeros(it.startAddress - currentPos);
-                currentPos = it.startAddress;
+                size_t hole = map.startAddress - current;
+
+                if (!fillZeros(hole))
+                {
+                    dest.close();
+                    return false;
+                }
+
+                current = map.startAddress;
             }
 
-            uintptr_t intersectStart = std::max(it.startAddress, currentPos);
-            uintptr_t intersectEnd = std::min(it.endAddress, endAddress);
-            size_t intersectSize = intersectEnd - intersectStart;
+            uintptr_t dumpStart = std::max(current, map.startAddress);
+            uintptr_t dumpEnd = std::min(endAddress, map.endAddress);
+            size_t dumpSize = dumpEnd - dumpStart;
 
-            bool success = false;
-            bool changedPerms = false;
+            if (!dumpSize)
+                continue;
 
-            if (!it.readable)
+            bool restoreProtection = false;
+            uintptr_t protectStart = 0;
+            size_t protectSize = 0;
+
+            /*
+             * Add read permission when needed.
+             */
+            if (!map.readable)
             {
-                if (KittyMemory::memProtect((void *)it.startAddress, it.length, it.protection | PROT_READ) == 0)
+                protectStart = KT_PAGE_START(dumpStart);
+                uintptr_t protectEnd = KT_PAGE_END(dumpEnd);
+                protectSize = protectEnd - protectStart;
+                if (mprotect(reinterpret_cast<void *>(protectStart), protectSize, map.protection | PROT_READ) == 0)
                 {
-                    changedPerms = true;
+                    restoreProtection = true;
                 }
             }
 
-            ssize_t nbytes = 0;
-            if (it.readable || changedPerms)
+            size_t copiedBytes = 0;
+
+            if (map.readable || restoreProtection)
             {
-                nbytes = dest.write((const void *)intersectStart, intersectSize);
-                if (nbytes == (ssize_t)intersectSize)
+                ssize_t written = dest.write(reinterpret_cast<void *>(dumpStart), dumpSize);
+
+                if (written > 0)
+                    copiedBytes = static_cast<size_t>(written);
+            }
+
+            /*
+             * Restore original protection.
+             */
+            if (restoreProtection)
+            {
+                mprotect(reinterpret_cast<void *>(protectStart), protectSize, map.protection);
+            }
+
+            /*
+             * Preserve offsets for failed/partial ranges.
+             */
+            if (copiedBytes < dumpSize)
+            {
+                if (!fillZeros(dumpSize - copiedBytes))
                 {
-                    success = true;
+                    dest.close();
+                    return false;
                 }
             }
 
-            if (!success)
-            {
-                fillWithZeros(intersectSize - nbytes);
-            }
-
-            if (changedPerms)
-            {
-                KittyMemory::memProtect((void *)it.startAddress, it.length, it.protection);
-            }
-
-            currentPos += intersectSize;
+            current = dumpEnd;
         }
 
-        if (currentPos < endAddress)
+        /*
+         * Tail after the last mapping.
+         */
+        if (current < endAddress)
         {
-            fillWithZeros(endAddress - currentPos);
-            currentPos = endAddress;
+            if (!fillZeros(endAddress - current))
+            {
+                dest.close();
+                return false;
+            }
+
+            current = endAddress;
         }
 
         dest.close();
-        return (currentPos - address) == size;
+
+        return current == endAddress;
     }
 
-    bool dumpMemFileToDisk(const std::string &memFile, const std::string &destination)
+    bool dumpFileMappingsToDisk(const std::string &memFile,
+                                const std::string &destination,
+                                const std::vector<ProcMap> &maps)
     {
-        if (memFile.empty() || destination.empty())
+        if (memFile.empty() || destination.empty() || maps.empty())
             return false;
 
-        auto fileMaps = KittyMemory::getMaps(EProcMapFilter::EndWith, memFile);
-        if (fileMaps.empty())
+        auto fileMappings = getFileMappings(memFile, maps);
+        if (fileMappings.empty())
             return false;
 
-        auto firstMap = fileMaps.front();
-        uintptr_t totalStart = firstMap.startAddress;
-        uintptr_t lastEnd = firstMap.endAddress;
+        std::string outPath = destination;
+        kt_stat64_t st{};
 
-        for (size_t i = 1; i < fileMaps.size(); ++i)
+        if (kt_stat64(destination.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
         {
-            const auto &it = fileMaps[i];
-            if (firstMap.inode != 0 && it.inode == firstMap.inode && it.startAddress == lastEnd)
+            // Destination is an existing directory.
+            if (access(destination.c_str(), W_OK) != 0)
+                return false;
+
+            size_t pos = memFile.find_last_of("/\\");
+            outPath += (outPath[outPath.length() - 1] == '/' || outPath[outPath.length() - 1] == '\\') ? "" : "/";
+            outPath += (pos == std::string::npos) ? memFile : memFile.substr(pos + 1);
+        }
+        else
+        {
+            // Destination is a file path.
+            if (kt_stat64(outPath.c_str(), &st) == 0)
             {
-                lastEnd = it.endAddress;
-                continue;
+                // Existing file: must be writable.
+                if (access(outPath.c_str(), W_OK) != 0)
+                    return false;
             }
-            break;
+            else
+            {
+                // New file: parent directory must be writable.
+                size_t pos = outPath.find_last_of("/\\");
+                std::string parent = (pos == std::string::npos) ? "." : outPath.substr(0, pos);
+
+                if (access(parent.c_str(), W_OK) != 0)
+                    return false;
+            }
         }
 
-        size_t totalSize = lastEnd - totalStart;
-        return dumpMemToDisk(totalStart, totalSize, destination);
+        bool dumpedAtleastOne = false;
+
+        for (size_t i = 0; i < fileMappings.size(); ++i)
+        {
+            std::string filePath = outPath;
+
+            if (fileMappings.size() > 1)
+            {
+                size_t dot = filePath.find_last_of('.');
+                if (dot != std::string::npos)
+                    filePath.insert(dot, "_" + std::to_string(i));
+                else
+                    filePath += "_" + std::to_string(i);
+            }
+
+            uintptr_t start = fileMappings[i].front().startAddress;
+            uintptr_t end = fileMappings[i].back().endAddress;
+
+            if (dumpMemToDisk(start, end - start, filePath, maps))
+                dumpedAtleastOne = true;
+        }
+
+        return dumpedAtleastOne;
     }
 
 
@@ -533,237 +599,194 @@ namespace KittyMemory
         return syscall(syscall_wpmv_n, pid, lvec, liovcnt, rvec, riovcnt, flags);
     }
 
-    size_t syscallMemOp(EPROCESS_VM_OP op, uintptr_t address, void *buffer, size_t len)
-    {
-        if (!address || !buffer || !len)
-            return 0;
-
-        const static pid_t pid = getpid();
-
-        struct iovec lvec{.iov_base = buffer, .iov_len = 0};
-        struct iovec rvec{.iov_base = reinterpret_cast<void *>(address), .iov_len = 0};
-
-        ssize_t n = 0;
-        size_t bytes_op = 0, remaining = len;
-        bool page_mode = false;
-        do
-        {
-            size_t remaining_or_pglen = remaining;
-            if (page_mode)
-                remaining_or_pglen = std::min(KT_PAGE_LEN(rvec.iov_base), remaining);
-
-            lvec.iov_len = remaining_or_pglen;
-            rvec.iov_len = remaining_or_pglen;
-
-            errno = 0;
-
-            if (op == EPROCESS_VM_OP::READV)
-                n = KT_EINTR_RETRY(syscall_process_vm_readv(pid, &lvec, 1, &rvec, 1, 0));
-            else
-                n = KT_EINTR_RETRY(syscall_process_vm_writev(pid, &lvec, 1, &rvec, 1, 0));
-
-            if (n > 0)
-            {
-                remaining -= n;
-                bytes_op += n;
-                lvec.iov_base = reinterpret_cast<char *>(lvec.iov_base) + n;
-                rvec.iov_base = reinterpret_cast<char *>(rvec.iov_base) + n;
-            }
-            else
-            {
-                if (n == -1)
-                {
-                    int err = errno;
-                    if (err != EFAULT && err != EIO && err != EINVAL)
-                    {
-                        break;
-                    }
-                }
-                if (page_mode)
-                {
-                    remaining -= remaining_or_pglen;
-                    lvec.iov_base = reinterpret_cast<char *>(lvec.iov_base) + remaining_or_pglen;
-                    rvec.iov_base = reinterpret_cast<char *>(rvec.iov_base) + remaining_or_pglen;
-                }
-            }
-            page_mode = n == -1 || size_t(n) != remaining_or_pglen;
-        } while (remaining > 0);
-        return bytes_op;
-    }
-
 #elif __APPLE__
 
-    kern_return_t getMemRegionInfo(mach_vm_address_t region, vm_region_submap_short_info_64 *info_out)
+    std::vector<mem_range_info_t> getAllRegions()
     {
-        mach_vm_address_t search_address = region; 
-        mach_vm_size_t region_size = 0;
-        natural_t nesting_depth = 99;
-        vm_region_submap_short_info_data_64_t info{};
-        mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-        kern_return_t kret = mach_vm_region_recurse(mach_task_self(),
-                                    &region,
-                                    &region_size,
-                                    &nesting_depth,
-                                    (vm_region_recurse_info_t)&info,
-                                    &info_count);
+        std::vector<mem_range_info_t> regions;
 
-        if (kret != KERN_SUCCESS)
-            return kret;
+        mach_vm_address_t address = 0;
+        natural_t depth = 0;
 
-        // Ensure the kernel didn't jump past our target address due to an unmapped gap
-        if (region < search_address || region >= (search_address + region_size))
-            return KERN_INVALID_ADDRESS;
-
-        if (info_out)
-            *info_out = info;
-
-        return KERN_SUCCESS;
-    }
-
-    bool memRead(const void *address, void *buffer, size_t len)
-    {
-        KITTY_LOGD("memRead(%p, %p, %zu)", address, buffer, len);
-
-        if (!address)
+        while (true)
         {
-            KITTY_LOGE("memRead err address (%p) is null", address);
-            return false;
-        }
+            mach_vm_size_t size = 0;
+            vm_region_submap_short_info_data_64_t info{};
+            mach_msg_type_number_t count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(),
+                                                      &address,
+                                                      &size,
+                                                      &depth,
+                                                      reinterpret_cast<vm_region_recurse_info_t>(&info),
+                                                      &count);
 
-        if (!buffer)
-        {
-            KITTY_LOGE("memRead err buffer (%p) is null", buffer);
-            return false;
-        }
+            if (kr != KERN_SUCCESS)
+                break;
 
-        if (!len)
-        {
-            KITTY_LOGE("memRead err invalid len");
-            return false;
-        }
-
-        mach_vm_size_t nread = 0;
-        kern_return_t kret = mach_vm_read_overwrite(mach_task_self(),
-                                                    mach_vm_address_t(address),
-                                                    mach_vm_size_t(len),
-                                                    mach_vm_address_t(buffer),
-                                                    &nread);
-        if (kret != KERN_SUCCESS || nread != len)
-        {
-            KITTY_LOGE("memRead err vm_read failed - [ nread(%p) - kerror(%d) ]", (void *)nread, kret);
-            return false;
-        }
-
-        return true;
-    }
-
-    /*
-    refs to
-    - https://github.com/evelyneee/ellekit/blob/main/ellekitc/ellekitc.c
-    - CydiaSubstrate
-    */
-    Memory_Status memWrite(void *address, const void *buffer, size_t len)
-    {
-        KITTY_LOGD("memWrite(%p, %p, %zu)", address, buffer, len);
-
-        if (!address)
-        {
-            KITTY_LOGE("memWrite err address (%p) is null.", address);
-            return KMS_INV_ADDR;
-        }
-
-        if (!buffer)
-        {
-            KITTY_LOGE("memWrite err buffer (%p) is null.", buffer);
-            return KMS_INV_BUF;
-        }
-
-        if (!len)
-        {
-            KITTY_LOGE("memWrite err invalid len.");
-            return KMS_INV_LEN;
-        }
-
-        task_t self_task = mach_task_self();
-        mach_vm_address_t page_start = mach_vm_address_t(KT_PAGE_START(address));
-        size_t page_len = KT_PAGE_LEN2(address, len);
-
-        vm_region_submap_short_info_64 page_info = {};
-        kern_return_t kret = getMemRegionInfo(page_start, &page_info);
-        if (kret != KERN_SUCCESS)
-        {
-            KITTY_LOGE("memWrite err failed to get page info of address (%p) - kerror(%d).", address, kret);
-            return KMS_ERR_GET_PAGEINFO;
-        }
-
-        // already has write perm
-        if (page_info.protection & VM_PROT_WRITE)
-        {
-            kret = mach_vm_write(self_task,
-                                 mach_vm_address_t(address),
-                                 vm_offset_t(buffer),
-                                 mach_msg_type_number_t(len));
-            if (kret != KERN_SUCCESS)
+            // If the region points to a submap (nested page directory),
+            // increment depth to step inside it without advancing the search address.
+            if (info.is_submap)
             {
-                KITTY_LOGE("memWrite err vm_write failed to write data to address (%p) - "
-                           "kerror(%d).",
-                           address,
-                           kret);
-                return KMS_ERR_VMWRITE;
+                depth++;
+                continue;
             }
-            return KMS_SUCCESS;
+
+            mach_vm_address_t next = address + size;
+            if (next <= address)
+                break;
+
+            mem_range_info_t region{};
+            region.start = static_cast<uintptr_t>(address);
+            region.size = static_cast<size_t>(size);
+            region.end = region.start + region.size;
+            region.offset = info.offset;
+
+            region.readable = (info.protection & VM_PROT_READ) != 0;
+            region.writeable = (info.protection & VM_PROT_WRITE) != 0;
+            region.executable = (info.protection & VM_PROT_EXECUTE) != 0;
+
+            region.protection = info.protection;
+            region.max_protection = info.max_protection;
+
+            char path[KT_PROC_PIDPATHINFO_MAXSIZE] = {};
+            int ret = proc_regionfilename(getpid(), static_cast<uint64_t>(address), path, sizeof(path));
+            if (ret > 0)
+            {
+                region.name.assign(path, static_cast<size_t>(ret));
+            }
+
+            regions.push_back(region);
+
+            address = next;
         }
 
-#if 0
-        // check for Substrate/ellekit MSHookMemory existance first
-        if (findMSHookMemory(address, buffer, len))
-            return KMS_SUCCESS;
-#endif
-
-        // copy-on-write, see vm_map_protect in vm_map.c
-        kret = mach_vm_protect(self_task, page_start, page_len, false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-        if (kret != KERN_SUCCESS)
+        if (!regions.empty())
         {
-            KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) COW failed - "
-                       "kerror(%d).",
-                       (void *)page_start,
-                       page_len,
-                       page_info.protection,
-                       kret);
-            return KMS_ERR_PROT;
+            std::sort(regions.begin(), regions.end(), [](const mem_range_info_t &a, const mem_range_info_t &b) {
+                return a.start < b.start;
+            });
         }
 
-        kret = mach_vm_write(self_task, mach_vm_address_t(address), vm_offset_t(buffer), mach_msg_type_number_t(len));
-        if (kret != KERN_SUCCESS)
-        {
-            KITTY_LOGE("memWrite err vm_write failed to write data to address (%p) - kerror(%d).", address, kret);
-            return KMS_ERR_VMWRITE;
-        }
-
-        kret = mach_vm_protect(self_task, page_start, page_len, false, page_info.protection);
-        if (kret != KERN_SUCCESS)
-        {
-            KITTY_LOGE("memWrite err vm_protect(page: %p, len: %zu, prot: %d) restore failed "
-                       "- kerror(%d).",
-                       (void *)page_start,
-                       page_len,
-                       page_info.protection,
-                       kret);
-            return KMS_ERR_PROT;
-        }
-
-        sys_icache_invalidate(reinterpret_cast<void *>(page_start), page_len);
-
-        return KMS_SUCCESS;
+        return regions;
     }
 
-    uintptr_t getAbsoluteAddress(const char *fileName, uintptr_t address)
-    {
-        uintptr_t slide = 0;
+    std::vector<mem_range_info_t> getRegions(EMemRegionFilter filter,
+                                             const std::string &name,
+                                             const std::vector<mem_range_info_t> &regions)
 
+    {
+        std::vector<mem_range_info_t> retRegions;
+        regex_t re{};
+        bool isRegex = (filter == EMemRegionFilter::Regex);
+
+        if (isRegex)
+        {
+            if (regcomp(&re, name.c_str(), REG_EXTENDED | REG_NOSUB) != 0)
+                return retRegions;
+        }
+
+        for (const auto &it : regions)
+        {
+            if (!it.isValid())
+                continue;
+
+            bool match = false;
+            switch (filter)
+            {
+            case EMemRegionFilter::Equal:
+                match = (it.name == name);
+                break;
+            case EMemRegionFilter::StartWith:
+                match = KittyUtils::String::startsWith(it.name, name);
+                break;
+            case EMemRegionFilter::EndWith:
+                match = KittyUtils::String::endsWith(it.name, name);
+                break;
+            case EMemRegionFilter::Regex:
+                match = (regexec(&re, it.name.c_str(), 0, NULL, 0) == 0);
+                break;
+            case EMemRegionFilter::Contains:
+            default:
+                match = KittyUtils::String::contains(it.name, name);
+                break;
+            }
+
+            if (match)
+            {
+                retRegions.push_back(it);
+            }
+        }
+
+        if (isRegex)
+            regfree(&re);
+
+        return retRegions;
+    }
+
+    mem_range_info_t getAddressRegion(mach_vm_address_t address, const std::vector<mem_range_info_t> &regions)
+    {
+        if (!address)
+            return {};
+
+        auto it = std::lower_bound(regions.begin(),
+                                   regions.end(),
+                                   address,
+                                   [](const mem_range_info_t &m, uintptr_t val) { return m.end <= val; });
+
+        if (it != regions.end() && address >= it->start && address < it->end)
+        {
+            return *it;
+        }
+
+        return {};
+    }
+
+    std::vector<std::vector<mem_range_info_t>> getFileMappings(const std::string &path,
+                                                               const std::vector<mem_range_info_t> &regions)
+    {
+        auto matched_regions = getRegions(EMemRegionFilter::EndWith, path, regions);
+        if (matched_regions.empty())
+            return {};
+
+        std::sort(matched_regions.begin(), matched_regions.end(), [](const auto &a, const auto &b) {
+            return a.start < b.start;
+        });
+
+        std::vector<std::vector<mem_range_info_t>> mappings;
+        mappings.emplace_back();
+        mappings.back().push_back(matched_regions.front());
+
+        uint64_t expectedNextOffset = matched_regions.front().offset + matched_regions.front().size;
+
+        for (size_t i = 1; i < matched_regions.size(); ++i)
+        {
+            const auto &prev = mappings.back().back();
+            const auto &r = matched_regions[i];
+
+            const bool contiguousVA = (r.start == prev.end);
+            const bool contiguousFile = (r.offset == expectedNextOffset);
+
+            if (contiguousVA && contiguousFile)
+            {
+                mappings.back().push_back(r);
+                expectedNextOffset += r.size;
+            }
+            else
+            {
+                mappings.emplace_back();
+                mappings.back().push_back(r);
+                expectedNextOffset = r.offset + r.size;
+            }
+        }
+
+        return mappings;
+    }
+
+    uintptr_t getAbsoluteAddress(const char *imageName, uintptr_t address)
+    {
         const uint32_t imageCount = _dyld_image_count();
 
-        if (!fileName)
+        if (!imageName)
         {
             uint32_t exeBufSize = 1024;
             std::vector<char> exeBuf(exeBufSize, 0);
@@ -795,7 +818,7 @@ namespace KittyMemory
             if (exeIdx < 0)
                 return 0;
 
-            slide = _dyld_get_image_vmaddr_slide(exeIdx);
+            return address + _dyld_get_image_vmaddr_slide(exeIdx);
         }
         else
         {
@@ -805,125 +828,547 @@ namespace KittyMemory
                 if (!name)
                     continue;
 
-                if (!KittyUtils::String::endsWith(std::string(name), fileName))
+                if (!KittyUtils::String::endsWith(std::string(name), imageName))
                     continue;
 
-                slide = _dyld_get_image_vmaddr_slide(i);
-
-                break;
+                return address + _dyld_get_image_vmaddr_slide(i);
             }
         }
-        
-        if (slide == 0)
-            return 0;
 
-        return slide + address;
+        return 0;
     }
 
-    size_t syscallMemRead(uintptr_t address, void *buffer, size_t len)
+    bool memProtect(uintptr_t address, size_t length, vm_prot_t protection)
     {
-        if (!address || !buffer || !len)
-            return 0;
-
-        const mach_port_t task = mach_task_self();
-        size_t bytes_read_total = 0;
-        size_t remaining = len;
-
-        uint8_t *local_ptr = reinterpret_cast<uint8_t *>(buffer);
-        mach_vm_address_t remote_ptr = static_cast<mach_vm_address_t>(address);
-
-        bool page_mode = false;
-
-        do
-        {
-            size_t chunk_size = remaining;
-            if (page_mode)
-            {
-                chunk_size = std::min(KT_PAGE_LEN(remote_ptr), remaining);
-            }
-
-            mach_vm_size_t bytes_read_chunk = 0;
-            kern_return_t kr = mach_vm_read_overwrite(task,
-                                                      remote_ptr,
-                                                      chunk_size,
-                                                      reinterpret_cast<mach_vm_address_t>(local_ptr),
-                                                      &bytes_read_chunk);
-
-            if (kr == KERN_SUCCESS && bytes_read_chunk > 0)
-            {
-                remaining -= bytes_read_chunk;
-                bytes_read_total += bytes_read_chunk;
-                local_ptr += bytes_read_chunk;
-                remote_ptr += bytes_read_chunk;
-
-                // If we didn't read the full requested chunk, enter page mode
-                page_mode = (bytes_read_chunk != chunk_size);
-            }
-            else
-            {
-                if (page_mode)
-                {
-                    // In page mode, skip this bad page block entirely and move forward
-                    remaining -= chunk_size;
-                    local_ptr += chunk_size;
-                    remote_ptr += chunk_size;
-                }
-                else
-                {
-                    // Normal large read failed, drop down to page-by-page scanning
-                    page_mode = true;
-                }
-            }
-
-        } while (remaining > 0);
-
-        return bytes_read_total;
+        uintptr_t pageStart = KT_PAGE_START(address);
+        size_t pageLen = KT_PAGE_REMAIN2(address, length);
+        kern_return_t ret = mach_vm_protect(mach_task_self(), pageStart, pageLen, false, protection);
+        return ret == KERN_SUCCESS;
     }
 
-    bool syscallMemWrite(uintptr_t address, void *buffer, size_t len)
+    template <typename T>
+    static bool memPatch(uintptr_t address, void *buffer, size_t len, vm_prot_t requiredProt, T &&operation)
     {
         if (!address || !buffer || !len)
             return false;
 
-        return mach_vm_write(mach_task_self(),
-                             static_cast<mach_vm_address_t>(address),
-                             reinterpret_cast<vm_offset_t>(buffer),
-                             static_cast<mach_msg_type_number_t>(len)) == KERN_SUCCESS;
-    }
+        uintptr_t current = address;
+        uintptr_t end = address + len;
 
-#endif // __APPLE__
+        if (end <= current)
+            return false;
 
-} // namespace KittyMemory
+        while (current < end)
+        {
+            mem_range_info_t info = getAddressRegion(current);
+            if (!info.isValid())
+                return false;
 
-#ifdef __APPLE__
+            uintptr_t regionEnd = std::min<uintptr_t>(info.end, end);
+            size_t chunk = regionEnd - current;
 
-#if 0
-#ifndef kNO_SUBSTRATE
-bool findMSHookMemory(void *dst, const void *src, size_t len)
-{
-    static bool checked = false;
-    static void *fnPtr = nullptr;
+            vm_prot_t oldProt = info.protection;
+            bool restoreProtection = false;
+            bool permissionGranted = (oldProt & requiredProt);
 
-    if (!checked)
-    {
-        fnPtr = (void*)KittyScanner::findSymbol("/usr/lib/libsubstrate.dylib", "_MSHookMemory");
-        if (!fnPtr)
-            fnPtr = (void*)KittyScanner::findSymbol("/usr/lib/libellekit.dylib", "_MSHookMemory");
+            if (!permissionGranted)
+            {
+                vm_prot_t newProt = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY;
+                if (memProtect(current, chunk, newProt))
+                {
+                    permissionGranted = true;
+                    restoreProtection = true;
+                }
+            }
 
-        checked = true;
-    }
+            bool ok = operation(current, buffer, chunk, permissionGranted);
 
-    if (fnPtr)
-    {
-        reinterpret_cast<void (*)(void *, const void *, size_t)>(fnPtr)(dst, src, len);
+            if (restoreProtection)
+            {
+                memProtect(current, chunk, oldProt);
+            }
+
+            if (!ok)
+                return false;
+
+            if (permissionGranted && (requiredProt & VM_PROT_WRITE) &&
+                ((oldProt & VM_PROT_EXECUTE) || (requiredProt & VM_PROT_EXECUTE)))
+            {
+                sys_icache_invalidate(reinterpret_cast<void *>(current), chunk);
+            }
+
+            current += chunk;
+            buffer = static_cast<uint8_t *>(buffer) + chunk;
+        }
+
         return true;
     }
 
-    return false;
-}
-#else
-bool findMSHookMemory(void *, const void *, size_t) { return false; }
-#endif
-#endif
+    bool memRead(uintptr_t address, void *buffer, size_t len)
+    {
+        KITTY_LOGD("memRead(%p, %p, %zu)", (void *)address, buffer, len);
+
+        if (!address || !buffer || !len)
+            return false;
+
+        return memPatch(address,
+                        buffer,
+                        len,
+                        VM_PROT_READ,
+                        [](uintptr_t addr, void *buf, size_t size, bool permissionGranted) -> bool {
+                            if (!permissionGranted)
+                                return false;
+                            return memcpy(buf, reinterpret_cast<void *>(addr), size);
+                        });
+    }
+
+    bool memWrite(uintptr_t address, const void *buffer, size_t len)
+    {
+        KITTY_LOGD("memWrite(%p, %p, %zu)", (void *)address, buffer, len);
+
+        if (!address || !buffer || !len)
+            return false;
+
+        return memPatch(address,
+                        const_cast<void *>(buffer),
+                        len,
+                        VM_PROT_WRITE,
+                        [](uintptr_t addr, void *buf, size_t size, bool permissionGranted) -> bool {
+                            if (!permissionGranted)
+                                return false;
+                            return memcpy(reinterpret_cast<void *>(addr), buf, size);
+                        });
+    }
+
+    bool dumpMemToDisk(uintptr_t address,
+                       size_t size,
+                       const std::string &destination,
+                       const std::vector<mem_range_info_t> &regions)
+    {
+        if (!address || !size || destination.empty() || regions.empty())
+            return false;
+
+        uintptr_t endAddress = address + size;
+        if (endAddress < address)
+            return false;
+
+        KittyIOFile dest(destination, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
+        if (!dest.open())
+            return false;
+
+        std::vector<char> zeroBuffer(0x10000, 0);
+        auto fillZeros = [&](size_t count) -> bool {
+            while (count)
+            {
+                size_t chunk = std::min(count, zeroBuffer.size());
+                ssize_t written = dest.write(zeroBuffer.data(), chunk);
+                if (written != (ssize_t)chunk)
+                    return false;
+
+                count -= chunk;
+            }
+
+            return true;
+        };
+
+        uintptr_t current = address;
+
+        for (const auto &region : regions)
+        {
+            if (region.end <= current)
+                continue;
+
+            if (region.start >= endAddress)
+                break;
+
+            /*
+             * Hole between mappings.
+             */
+            if (region.start > current)
+            {
+                size_t hole = region.start - current;
+
+                if (!fillZeros(hole))
+                {
+                    dest.close();
+                    return false;
+                }
+
+                current = region.start;
+            }
+
+            uintptr_t dumpStart = std::max(current, region.start);
+            uintptr_t dumpEnd = std::min(endAddress, region.end);
+            size_t dumpSize = dumpEnd - dumpStart;
+
+            if (!dumpSize)
+                continue;
+
+            bool restoreProtection = false;
+            uintptr_t protectStart = 0;
+            size_t protectSize = 0;
+
+            /*
+             * Add read permission when needed.
+             */
+            if (!region.readable)
+            {
+                protectStart = KT_PAGE_START(dumpStart);
+                uintptr_t protectEnd = KT_PAGE_END(dumpEnd);
+                protectSize = protectEnd - protectStart;
+                if (mach_vm_protect(mach_task_self(),
+                                    protectStart,
+                                    protectSize,
+                                    false,
+                                    region.protection | VM_PROT_READ) == KERN_SUCCESS)
+                {
+                    restoreProtection = true;
+                }
+            }
+
+            size_t copiedBytes = 0;
+
+            if (region.readable || restoreProtection)
+            {
+                ssize_t written = dest.write(reinterpret_cast<void *>(dumpStart), dumpSize);
+
+                if (written > 0)
+                    copiedBytes = static_cast<size_t>(written);
+            }
+
+            /*
+             * Restore original protection.
+             */
+            if (restoreProtection)
+            {
+                mach_vm_protect(mach_task_self(), protectStart, protectSize, false, region.protection);
+            }
+
+            /*
+             * Preserve offsets for failed/partial ranges.
+             */
+            if (copiedBytes < dumpSize)
+            {
+                if (!fillZeros(dumpSize - copiedBytes))
+                {
+                    dest.close();
+                    return false;
+                }
+            }
+
+            current = dumpEnd;
+        }
+
+        /*
+         * Tail after the last mapping.
+         */
+        if (current < endAddress)
+        {
+            if (!fillZeros(endAddress - current))
+            {
+                dest.close();
+                return false;
+            }
+
+            current = endAddress;
+        }
+
+        dest.close();
+
+        return current == endAddress;
+    }
+
+    bool dumpFileMappingsToDisk(const std::string &memFile,
+                                const std::string &destination,
+                                const std::vector<mem_range_info_t> &regions)
+    {
+        if (memFile.empty() || destination.empty() || regions.empty())
+            return false;
+
+        auto fileMappings = getFileMappings(memFile, regions);
+        if (fileMappings.empty())
+            return false;
+
+        std::string outPath = destination;
+        kt_stat64_t st{};
+
+        if (kt_stat64(destination.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
+        {
+            // Destination is an existing directory.
+            if (access(destination.c_str(), W_OK) != 0)
+                return false;
+
+            size_t pos = memFile.find_last_of("/\\");
+            outPath += (outPath[outPath.length() - 1] == '/' || outPath[outPath.length() - 1] == '\\') ? "" : "/";
+            outPath += (pos == std::string::npos) ? memFile : memFile.substr(pos + 1);
+        }
+        else
+        {
+            // Destination is a file path.
+            if (kt_stat64(outPath.c_str(), &st) == 0)
+            {
+                // Existing file: must be writable.
+                if (access(outPath.c_str(), W_OK) != 0)
+                    return false;
+            }
+            else
+            {
+                // New file: parent directory must be writable.
+                size_t pos = outPath.find_last_of("/\\");
+                std::string parent = (pos == std::string::npos) ? "." : outPath.substr(0, pos);
+
+                if (access(parent.c_str(), W_OK) != 0)
+                    return false;
+            }
+        }
+
+        bool dumpedAtleastOne = false;
+
+        for (size_t i = 0; i < fileMappings.size(); ++i)
+        {
+            std::string filePath = outPath;
+
+            if (fileMappings.size() > 1)
+            {
+                size_t dot = filePath.find_last_of('.');
+                if (dot != std::string::npos)
+                    filePath.insert(dot, "_" + std::to_string(i));
+                else
+                    filePath += "_" + std::to_string(i);
+            }
+
+            uintptr_t start = fileMappings[i].front().start;
+            uintptr_t end = fileMappings[i].back().end;
+
+            if (dumpMemToDisk(start, end - start, filePath, regions))
+                dumpedAtleastOne = true;
+        }
+
+        return dumpedAtleastOne;
+    }
+
 
 #endif // __APPLE__
+
+    /**
+     * @brief Amount of contiguous successfully processed memory before retrying
+     *        a large continuous transfer.
+     *
+     * After entering page mode, once this amount of memory has been successfully
+     * processed, the operation attempts to return to normal large-range mode.
+     */
+    static constexpr size_t KT_RETRY_NORMAL_AFTER = 64 * 1024;
+
+    /**
+     * @brief Internal transfer state.
+     *
+     * Used by KittyMemoryTransfer() to switch between continuous transfers and
+     * page-by-page transfers.
+     */
+    enum class KTTransferState
+    {
+        /**
+         * @brief Attempt to process the entire remaining region.
+         */
+        Normal,
+
+
+        /**
+         * @brief Process memory one page at a time.
+         */
+        Page
+    };
+
+    /**
+     * @brief Performs a memory transfer with optional inaccessible-page handling.
+     *
+     * This helper implements the common logic shared by memory operations backends.
+     *
+     * Behavior:
+     *
+     * - MemMode::Normal:
+     *   Performs a single continuous transfer attempt.
+     *
+     * - MemMode::SkipInaccessiblePages:
+     *   Attempts a continuous transfer first. If it fails, switches to page mode
+     *   and skips inaccessible pages. After 64 KiB of contiguous successful
+     *   transfers, it retries continuous mode.
+     *
+     * @tparam T Callable type implementing the actual read/write operation.
+     *
+     * @param address Starting memory address.
+     * @param buffer Buffer used for the transfer.
+     * @param len Number of bytes to transfer.
+     * @param mode Transfer behavior.
+     * @param operation Backend memory operation callback.
+     *
+     * @return Number of bytes successfully transferred.
+     */
+    template <typename T>
+    static size_t KittyMemoryTransfer(uintptr_t address, void *buffer, size_t len, MemMode mode, T &&operation)
+    {
+        if (!address || !buffer || !len)
+            return 0;
+
+        size_t total = 0;
+
+        KTTransferState state = KTTransferState::Normal;
+
+        size_t contiguousSuccess = 0;
+
+        while (len)
+        {
+            size_t requestSize = len;
+
+            if (state == KTTransferState::Page)
+                requestSize = std::min(KT_PAGE_REMAIN(address), len);
+
+            ssize_t sn = static_cast<ssize_t>(operation(address, buffer, requestSize));
+            if (sn < 0)
+            {
+#ifdef __APPLE__
+                switch (sn)
+                {
+                case -KERN_INVALID_TASK:       // process exited
+                case -KERN_RESOURCE_SHORTAGE:  // kernel could not allocate resources
+                case -KERN_PROTECTION_FAILURE: // permission lost
+                case -KERN_INVALID_ARGUMENT:   // invalid arguments
+                    return total;
+                default:
+                    break;
+                }
+#else
+                switch (sn)
+                {
+                case -ESRCH:  // process exited
+                case -EBADF:  // invalid fd
+                case -EPERM:  // permission lost
+                case -EINVAL: // invalid arguments
+                    return total;
+                default:
+                    break;
+                }
+#endif
+            }
+
+            size_t n = sn < 0 ? 0 : static_cast<size_t>(sn);
+
+            if (n > 0)
+            {
+                total += n;
+
+                address += n;
+                buffer = static_cast<char *>(buffer) + n;
+                len -= n;
+
+                if (state == KTTransferState::Page)
+                {
+                    contiguousSuccess += n;
+
+                    if (contiguousSuccess >= KT_RETRY_NORMAL_AFTER)
+                    {
+                        state = KTTransferState::Normal;
+                        contiguousSuccess = 0;
+                    }
+                }
+
+                // partial success means remaining bytes are still pending
+                if (n != requestSize && mode == MemMode::Normal)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            /*
+             * No bytes transferred.
+             */
+
+            if (mode == MemMode::Normal)
+                break;
+
+            if (state == KTTransferState::Normal)
+            {
+                /*
+                 * Large request failed.
+                 * Switch to page scanning.
+                 */
+                state = KTTransferState::Page;
+                contiguousSuccess = 0;
+                continue;
+            }
+
+            /*
+             * Page failed.
+             * Skip it.
+             */
+            size_t skip = std::min(KT_PAGE_REMAIN(address), len);
+
+            address += skip;
+            buffer = static_cast<char *>(buffer) + skip;
+            len -= skip;
+
+            contiguousSuccess = 0;
+        }
+
+        return total;
+    }
+
+#ifdef __APPLE__
+
+    size_t syscallMemRead(uintptr_t address, void *buffer, size_t len, MemMode mode)
+    {
+        return KittyMemoryTransfer(address, buffer, len, mode, [&](uintptr_t addr, void *buf, size_t size) -> ssize_t {
+            mach_vm_size_t outSize = 0;
+            kern_return_t kr = mach_vm_read_overwrite(mach_task_self(),
+                                                      static_cast<mach_vm_address_t>(addr),
+                                                      static_cast<mach_vm_size_t>(size),
+                                                      reinterpret_cast<mach_vm_address_t>(buf),
+                                                      &outSize);
+            return kr != KERN_SUCCESS ? static_cast<ssize_t>(-kr) : static_cast<ssize_t>(outSize);
+        });
+    }
+
+    size_t syscallMemWrite(uintptr_t address, void *buffer, size_t len, MemMode mode)
+    {
+        return KittyMemoryTransfer(address, buffer, len, mode, [&](uintptr_t addr, void *buf, size_t size) -> ssize_t {
+            kern_return_t kr = mach_vm_write(mach_task_self(),
+                                             static_cast<mach_vm_address_t>(addr),
+                                             reinterpret_cast<vm_offset_t>(buf),
+                                             static_cast<mach_msg_type_number_t>(size));
+            return kr != KERN_SUCCESS ? static_cast<ssize_t>(-kr) : static_cast<ssize_t>(size);
+        });
+    }
+
+#else
+
+    size_t syscallMemRead(uintptr_t address, void *buffer, size_t len, MemMode mode)
+    {
+        address = KittyUtils::untagPointer(address);
+
+        return KittyMemoryTransfer(address, buffer, len, mode, [&](uintptr_t addr, void *buf, size_t size) -> ssize_t {
+            errno = 0;
+            struct iovec local{buf, size};
+            struct iovec remote{reinterpret_cast<void *>(addr), size};
+            ssize_t n = KT_EINTR_RETRY(syscall_process_vm_readv(getpid(), &local, 1, &remote, 1, 0));
+            return n < 0 ? static_cast<ssize_t>(-errno) : static_cast<ssize_t>(n);
+        });
+    }
+
+    size_t syscallMemWrite(uintptr_t address, void *buffer, size_t len, MemMode mode)
+    {
+        address = KittyUtils::untagPointer(address);
+        
+        return KittyMemoryTransfer(address, buffer, len, mode, [&](uintptr_t addr, void *buf, size_t size) -> ssize_t {
+            errno = 0;
+            struct iovec local{buf, size};
+            struct iovec remote{reinterpret_cast<void *>(addr), size};
+            ssize_t n = KT_EINTR_RETRY(syscall_process_vm_writev(getpid(), &local, 1, &remote, 1, 0));
+            return n < 0 ? static_cast<ssize_t>(-errno) : static_cast<ssize_t>(n);
+        });
+    }
+
+#endif
+
+} // namespace KittyMemory

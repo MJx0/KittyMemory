@@ -2,7 +2,7 @@
 
 #include "KittyUtils.hpp"
 
-#define KT_IO_BUFFER_SIZE ((size_t)(1024 * 1024))
+#define KT_IO_CHUNK_SIZE ((size_t)(1024 * 1024))
 
 /**
  * @brief This class provides an interface for file operations.
@@ -15,33 +15,24 @@ private:
     int _flags;
     mode_t _mode;
     int _error;
-    size_t _bufferSize;
 
 public:
-    KittyIOFile() : _fd(-1), _flags(0), _mode(0), _error(0), _bufferSize(KT_IO_BUFFER_SIZE)
+    /**
+     * @brief Default constructor creating an uninitialized file object.
+     */
+    KittyIOFile() : _fd(-1), _flags(0), _mode(0), _error(0)
     {
     }
 
     /**
-     * @brief Constructs a new KittyIOFile object with file path, flags, and mode.
+     * @brief Constructs a new KittyIOFile object with file path, flags, and optional mode.
      *
      * @param filePath The path to the file.
      * @param flags The flags for opening the file.
-     * @param mode The mode for opening the file.
+     * @param mode The mode/permissions for opening the file (default: 0).
      */
-    KittyIOFile(const std::string &filePath, int flags, mode_t mode)
-        : _fd(-1), _filePath(filePath), _flags(flags), _mode(mode), _error(0), _bufferSize(KT_IO_BUFFER_SIZE)
-    {
-    }
-
-    /**
-     * @brief Constructs a new KittyIOFile object with file path and flags.
-     *
-     * @param filePath The path to the file.
-     * @param flags The flags for opening the file.
-     */
-    KittyIOFile(const std::string &filePath, int flags)
-        : _fd(-1), _filePath(filePath), _flags(flags), _mode(0), _error(0), _bufferSize(KT_IO_BUFFER_SIZE)
+    KittyIOFile(const std::string &filePath, int flags, mode_t mode = 0)
+        : _fd(-1), _filePath(filePath), _flags(flags), _mode(mode), _error(0)
     {
     }
 
@@ -49,8 +40,43 @@ public:
     {
         if (_fd >= 0)
         {
-            ::close(_fd);
+            close();
         }
+    }
+
+    KittyIOFile(const KittyIOFile &) = delete;
+    KittyIOFile &operator=(const KittyIOFile &) = delete;
+
+    /**
+     * @brief Move constructor. Transfers ownership of the file descriptor.
+     */
+    KittyIOFile(KittyIOFile &&other) noexcept
+        : _fd(other._fd), _filePath(std::move(other._filePath)), _flags(other._flags), _mode(other._mode),
+          _error(other._error)
+    {
+        other._fd = -1;
+        other._error = 0;
+    }
+
+    /**
+     * @brief Move assignment operator. Closes current file descriptor and transfers ownership.
+     */
+    KittyIOFile &operator=(KittyIOFile &&other) noexcept
+    {
+        if (this != &other)
+        {
+            close();
+
+            _fd = other._fd;
+            _filePath = std::move(other._filePath);
+            _flags = other._flags;
+            _mode = other._mode;
+            _error = other._error;
+
+            other._fd = -1;
+            other._error = 0;
+        }
+        return *this;
     }
 
     /**
@@ -85,26 +111,6 @@ public:
     inline std::string lastStrError() const
     {
         return _error ? strerror(_error) : "";
-    }
-
-    /**
-     * @brief Returns the buffer size used for chunk reads/writes.
-     *
-     * @return The buffer size.
-     */
-    inline size_t bufferSize() const
-    {
-        return _bufferSize;
-    }
-
-    /**
-     * @brief Sets the buffer size used for chunk reads/writes.
-     *
-     * @param size The new buffer size.
-     */
-    inline void setBufferSize(size_t size)
-    {
-        _bufferSize = size;
     }
 
     /**
@@ -173,7 +179,7 @@ public:
      * @param len The number of bytes to read.
      * @return The number of bytes read, or -1 on error.
      */
-    ssize_t pread(uintptr_t offset, void *buffer, size_t len);
+    ssize_t pread(kt_off64_t offset, void *buffer, size_t len);
 
     /**
      * @brief Writes data to the file at a given offset without changing file pointer.
@@ -183,7 +189,7 @@ public:
      * @param len The number of bytes to write.
      * @return The number of bytes written, or -1 on error.
      */
-    ssize_t pwrite(uintptr_t offset, const void *buffer, size_t len);
+    ssize_t pwrite(kt_off64_t offset, const void *buffer, size_t len);
 
     /**
      * @brief Checks if the file exists.
@@ -236,31 +242,17 @@ public:
         return _error == 0;
     }
 
-#ifdef __APPLE__
     /**
      * @brief Retrieves information about the file.
      *
      * @return The file information.
      */
-    inline struct stat info()
+    inline kt_stat64_t info()
     {
-        struct stat s = {};
-        _error = (stat(_filePath.c_str(), &s) == -1) ? errno : 0;
+        kt_stat64_t s = {};
+        _error = (kt_stat64(_filePath.c_str(), &s) == -1) ? errno : 0;
         return s;
     }
-#else
-    /**
-     * @brief Retrieves information about the file.
-     *
-     * @return The file information.
-     */
-    inline struct stat64 info()
-    {
-        struct stat64 s = {};
-        _error = (stat64(_filePath.c_str(), &s) == -1) ? errno : 0;
-        return s;
-    }
-#endif
 
     /**
      * @brief Checks if the file is a regular file.
@@ -290,25 +282,15 @@ public:
     bool readToBuffer(std::vector<char> *buf);
 
     /**
-     * @brief Writes the contents of the file at a given offset to another file.
-     *
-     * @param offset The offset to write to.
-     * @param len The number of bytes to write.
-     * @param filePath The file path to write to.
-     * @return true if the file was written successfully, false otherwise.
-     */
-    bool writeOffsetToFile(uintptr_t offset, size_t len, const std::string &filePath);
-
-    /**
-     * @brief Writes the contents of the file to another file.
+     * @brief Copies the contents of the file to another file.
      *
      * @param filePath The file path to write to.
      * @return true if the file was written successfully, false otherwise.
      */
-    bool writeToFile(const std::string &filePath)
+    bool copyToFile(const std::string &filePath)
     {
         KittyIOFile f(filePath, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
-        return f.open() && writeToFd(f.fd());
+        return f.open() && copyToFd(f.fd());
     }
 
     /**
@@ -317,7 +299,7 @@ public:
      * @param fd The file descriptor.
      * @return true if the file was written successfully, false otherwise.
      */
-    bool writeToFd(int fd);
+    bool copyToFd(int fd);
 
     /**
      * @brief Reads the contents of a file into a string.
@@ -355,7 +337,7 @@ public:
     inline static bool copy(const std::string &srcFilePath, const std::string &dstFilePath)
     {
         KittyIOFile f(srcFilePath, O_RDONLY | O_CLOEXEC);
-        return f.open() && f.writeToFile(dstFilePath);
+        return f.open() && f.copyToFile(dstFilePath);
     }
 
     /**
@@ -364,7 +346,7 @@ public:
      * @param dir The directory path.
      * @param cb The callback function to be called for each file.
      */
-    static void listFilesCallback(const std::string &dir, std::function<bool(const std::string &)> cb);
+    static bool listFilesCallback(const std::string &dir, std::function<bool(const std::string &)> cb);
 
     /**
      * @brief Recursively creates a directory path.

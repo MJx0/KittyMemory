@@ -2,45 +2,61 @@
 
 #ifdef __APPLE__
 
-extern "C" kern_return_t mach_vm_region_recurse(
-    vm_map_read_t target_task,
-    mach_vm_address_t *address,
-    mach_vm_size_t *size,
-    natural_t *nesting_depth,
-    vm_region_recurse_info_t info,
-    mach_msg_type_number_t *infoCnt
-);
+extern "C" kern_return_t mach_vm_region_recurse(vm_map_read_t target_task,
+                                                mach_vm_address_t *address,
+                                                mach_vm_size_t *size,
+                                                natural_t *nesting_depth,
+                                                vm_region_recurse_info_t info,
+                                                mach_msg_type_number_t *infoCnt);
 
-bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
+bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *info_out)
 {
     if (!use_cache_)
     {
-        mach_vm_address_t address = addr & ~(page_size_ - 1);
-        mach_vm_size_t size = 0;
-        natural_t nesting_depth = 99;
-        vm_region_submap_short_info_data_64_t info{};
-        mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-        kern_return_t kret = mach_vm_region_recurse(task_,
-                                                  &address,
-                                                  &size,
-                                                  &nesting_depth,
-                                                  (vm_region_recurse_info_t)&info,
-                                                  &info_count);
-        if (kret != KERN_SUCCESS)
-            return false;
+        mach_vm_address_t search_address = (addr & ~(page_size_ - 1));
+        mach_vm_address_t region = search_address;
+        natural_t depth = 0;
 
-        // Ensure the kernel didn't jump past our target address due to an unmapped gap
-        if (addr < address || addr >= (address + size))
-            return false;
+        while (true)
+        {
+            mach_vm_size_t size = 0;
+            vm_region_submap_short_info_data_64_t info{};
+            mach_msg_type_number_t count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
 
-        bool readable = (info.protection & VM_PROT_READ) != 0;
-        bool writable = (info.protection & VM_PROT_WRITE) != 0;
-        bool executable = (info.protection & VM_PROT_EXECUTE) != 0;
+            kern_return_t kr = mach_vm_region_recurse(task_,
+                                                      &region,
+                                                      &size,
+                                                      &depth,
+                                                      reinterpret_cast<vm_region_recurse_info_t>(&info),
+                                                      &count);
 
-        if (region)
-            *region = RegionInfo(address, address + size, readable, writable, executable);
-        
-        return address <= addr && addr < address + size;
+            if (kr != KERN_SUCCESS)
+                return false;
+
+            if (info.is_submap)
+            {
+                ++depth;
+                continue;
+            }
+
+            mach_vm_address_t region_end = region + size;
+            if (region_end < region)
+                return false;
+
+            if (search_address < region || search_address >= region_end)
+                return false;
+
+            bool readable = (info.protection & VM_PROT_READ) != 0;
+            bool writable = (info.protection & VM_PROT_WRITE) != 0;
+            bool executable = (info.protection & VM_PROT_EXECUTE) != 0;
+
+            if (info_out)
+                *info_out = RegionInfo(region, region + size, readable, writable, executable);
+
+            break;
+        }
+
+        return true;
     }
 
     if (!cachedRegions_.empty())
@@ -48,7 +64,7 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
         if (last_region_index_ < cachedRegions_.size() && cachedRegions_[last_region_index_].start <= addr &&
             addr < cachedRegions_[last_region_index_].end)
         {
-            *region = cachedRegions_[last_region_index_];
+            *info_out = cachedRegions_[last_region_index_];
             return true;
         }
 
@@ -74,7 +90,7 @@ bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *region)
             addr < cachedRegions_[best_match].end)
         {
             last_region_index_ = best_match;
-            *region = cachedRegions_[best_match];
+            *info_out = cachedRegions_[best_match];
             return true;
         }
     }
@@ -86,20 +102,33 @@ void KittyPtrValidator::refreshRegionCache()
 {
     cachedRegions_.clear();
     mach_vm_address_t address = 0;
+    natural_t depth = 0;
 
     while (true)
     {
         mach_vm_size_t size = 0;
-        natural_t nesting_depth = 99;
         vm_region_submap_short_info_data_64_t info{};
-        mach_msg_type_number_t info_count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
-        kern_return_t kret = mach_vm_region_recurse(task_,
+        mach_msg_type_number_t count = VM_REGION_SUBMAP_SHORT_INFO_COUNT_64;
+        kern_return_t kr = mach_vm_region_recurse(task_,
                                                   &address,
                                                   &size,
-                                                  &nesting_depth,
+                                                  &depth,
                                                   (vm_region_recurse_info_t)&info,
-                                                  &info_count);
-        if (kret != KERN_SUCCESS)
+                                                  &count);
+
+        if (kr != KERN_SUCCESS)
+            break;
+
+        // If the region points to a submap (nested page directory),
+        // increment depth to step inside it without advancing the search address.
+        if (info.is_submap)
+        {
+            depth++;
+            continue;
+        }
+
+        mach_vm_address_t next = address + size;
+        if (next <= address)
             break;
 
         bool readable = (info.protection & VM_PROT_READ) != 0;
@@ -116,7 +145,7 @@ void KittyPtrValidator::refreshRegionCache()
             cachedRegions_.emplace_back(new_region);
         }
 
-        address += size;
+        address = next;
     }
 
     if (!cachedRegions_.empty())
@@ -155,7 +184,7 @@ bool KittyPtrValidator::_parseMapsLine(const char *line, RegionInfo *region)
 
 bool KittyPtrValidator::_findRegion(uintptr_t addr, RegionInfo *out)
 {
-    addr = KittyUtils::untagHeepPtr(addr);
+    addr = KittyUtils::untagPointer(addr);
     if (!use_cache_)
     {
         bool found = false;
@@ -261,7 +290,7 @@ bool KittyPtrValidator::isPtrReadable(uintptr_t ptr, size_t len)
     if (ptr == 0 || ptr + len < ptr)
         return false;
 
-    ptr = KittyUtils::untagHeepPtr(ptr);
+    ptr = KittyUtils::untagPointer(ptr);
 
     uintptr_t end = ptr + len;
     RegionInfo region(0, 0, false, false, false);
@@ -281,7 +310,7 @@ bool KittyPtrValidator::isPtrWritable(uintptr_t ptr, size_t len)
     if (ptr == 0 || ptr + len < ptr)
         return false;
 
-    ptr = KittyUtils::untagHeepPtr(ptr);
+    ptr = KittyUtils::untagPointer(ptr);
 
     uintptr_t end = ptr + len;
     RegionInfo region(0, 0, false, false, false);
@@ -301,7 +330,7 @@ bool KittyPtrValidator::isPtrExecutable(uintptr_t ptr, size_t len)
     if (ptr == 0 || ptr + len < ptr)
         return false;
 
-    ptr = KittyUtils::untagHeepPtr(ptr);
+    ptr = KittyUtils::untagPointer(ptr);
 
     uintptr_t end = ptr + len;
     RegionInfo region(0, 0, false, false, false);

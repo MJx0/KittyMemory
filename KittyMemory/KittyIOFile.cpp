@@ -3,16 +3,18 @@
 bool KittyIOFile::open()
 {
     _error = 0;
-    if (_fd < 0)
-    {
-        if (_mode)
-            _fd = KT_EINTR_RETRY(::open(_filePath.c_str(), _flags, _mode));
-        else
-            _fd = KT_EINTR_RETRY(::open(_filePath.c_str(), _flags));
 
-        if (_fd < 0)
-            _error = errno;
-    }
+    if (_fd >= 0)
+        close();
+
+    if (_mode)
+        _fd = KT_EINTR_RETRY(::open(_filePath.c_str(), _flags, _mode));
+    else
+        _fd = KT_EINTR_RETRY(::open(_filePath.c_str(), _flags));
+
+    if (_fd < 0)
+        _error = errno;
+
     return _fd >= 0;
 }
 
@@ -23,6 +25,7 @@ bool KittyIOFile::close()
     {
         if (KT_EINTR_RETRY(::close(_fd)) == -1)
         {
+            _fd = -1;
             _error = errno;
             return false;
         }
@@ -40,14 +43,15 @@ ssize_t KittyIOFile::read(void *buffer, size_t len)
 
     char *ptr = static_cast<char *>(buffer);
     size_t total = 0;
+
     while (total < len)
     {
-        size_t toRead = std::min(len - total, _bufferSize);
+        size_t toRead = std::min(len - total, KT_IO_CHUNK_SIZE);
         ssize_t n = KT_EINTR_RETRY(::read(_fd, ptr + total, toRead));
         if (n <= 0)
         {
             _error = (n < 0) ? errno : 0;
-            return total > 0 ? total : -1;
+            return total > 0 ? total : (_error == 0 ? 0 : -1);
         }
         total += n;
     }
@@ -63,21 +67,22 @@ ssize_t KittyIOFile::write(const void *buffer, size_t len)
 
     const char *ptr = static_cast<const char *>(buffer);
     size_t total = 0;
+
     while (total < len)
     {
-        size_t toWrite = std::min(len - total, _bufferSize);
+        size_t toWrite = std::min(len - total, KT_IO_CHUNK_SIZE);
         ssize_t n = KT_EINTR_RETRY(::write(_fd, ptr + total, toWrite));
         if (n <= 0)
         {
             _error = (n < 0) ? errno : 0;
-            return total > 0 ? total : -1;
+            return total > 0 ? total : (_error == 0 ? 0 : -1);
         }
         total += n;
     }
     return total;
 }
 
-ssize_t KittyIOFile::pread(uintptr_t offset, void *buffer, size_t len)
+ssize_t KittyIOFile::pread(kt_off64_t offset, void *buffer, size_t len)
 {
     _error = 0;
 
@@ -86,25 +91,22 @@ ssize_t KittyIOFile::pread(uintptr_t offset, void *buffer, size_t len)
 
     char *ptr = static_cast<char *>(buffer);
     size_t total = 0;
+
     while (total < len)
     {
-        size_t toRead = std::min(len - total, _bufferSize);
-#ifdef __APPLE__
-        ssize_t n = KT_EINTR_RETRY(::pread(_fd, ptr + total, toRead, (off_t)(offset + total)));
-#else
-        ssize_t n = KT_EINTR_RETRY(::pread64(_fd, ptr + total, toRead, (off64_t)(offset + total)));
-#endif
+        size_t toRead = std::min(len - total, KT_IO_CHUNK_SIZE);
+        ssize_t n = KT_EINTR_RETRY(kt_pread64(_fd, ptr + total, toRead, (kt_off64_t)(offset + total)));
         if (n <= 0)
         {
             _error = (n < 0) ? errno : 0;
-            return total > 0 ? total : -1;
+            return total > 0 ? total : (_error == 0 ? 0 : -1);
         }
         total += n;
     }
     return total;
 }
 
-ssize_t KittyIOFile::pwrite(uintptr_t offset, const void *buffer, size_t len)
+ssize_t KittyIOFile::pwrite(kt_off64_t offset, const void *buffer, size_t len)
 {
     _error = 0;
 
@@ -115,16 +117,12 @@ ssize_t KittyIOFile::pwrite(uintptr_t offset, const void *buffer, size_t len)
     size_t total = 0;
     while (total < len)
     {
-        size_t toWrite = std::min(len - total, _bufferSize);
-#ifdef __APPLE__
-        ssize_t n = KT_EINTR_RETRY(::pwrite(_fd, ptr + total, toWrite, (off_t)(offset + total)));
-#else
-        ssize_t n = KT_EINTR_RETRY(::pwrite64(_fd, ptr + total, toWrite, (off64_t)(offset + total)));
-#endif
+        size_t toWrite = std::min(len - total, KT_IO_CHUNK_SIZE);
+        ssize_t n = KT_EINTR_RETRY(kt_pwrite64(_fd, ptr + total, toWrite, (kt_off64_t)(offset + total)));
         if (n <= 0)
         {
             _error = (n < 0) ? errno : 0;
-            return total > 0 ? total : -1;
+            return total > 0 ? total : (_error == 0 ? 0 : -1);
         }
         total += n;
     }
@@ -143,12 +141,22 @@ bool KittyIOFile::readToString(std::string *str)
     auto s = info();
     if (_error == 0 && s.st_size > 0)
     {
-        str->resize(s.st_size);
-        return (size_t)pread(0, str->data(), s.st_size) == (size_t)s.st_size;
+        str->resize(static_cast<size_t>(s.st_size));
+        ssize_t n = pread(0, (void*)str->data(), static_cast<size_t>(s.st_size));
+        if (n > 0)
+        {
+            if (n != static_cast<ssize_t>(s.st_size))
+            {
+                str->resize(static_cast<size_t>(n));
+            }
+            return true;
+        }
+
+        str->clear();
     }
 
-    std::vector<char> buffer(_bufferSize);
-    uintptr_t offset = 0;
+    std::vector<char> buffer(KT_IO_CHUNK_SIZE, 0);
+    kt_off64_t offset = 0;
     while (true)
     {
         ssize_t n = pread(offset, buffer.data(), buffer.size());
@@ -174,12 +182,22 @@ bool KittyIOFile::readToBuffer(std::vector<char> *buf)
     auto s = info();
     if (_error == 0 && s.st_size > 0)
     {
-        buf->resize(s.st_size);
-        return (size_t)pread(0, buf->data(), s.st_size) == (size_t)s.st_size;
+        buf->resize(static_cast<size_t>(s.st_size));
+        ssize_t n = pread(0, buf->data(), static_cast<size_t>(s.st_size));
+        if (n > 0)
+        {
+            if (n != static_cast<ssize_t>(s.st_size))
+            {
+                buf->resize(static_cast<size_t>(n));
+            }
+            return true;
+        }
+
+        buf->clear();
     }
 
-    std::vector<char> buffer(_bufferSize);
-    uintptr_t offset = 0;
+    std::vector<char> buffer(KT_IO_CHUNK_SIZE, 0);
+    kt_off64_t offset = 0;
     while (true)
     {
         ssize_t n = pread(offset, buffer.data(), buffer.size());
@@ -193,44 +211,15 @@ bool KittyIOFile::readToBuffer(std::vector<char> *buf)
     return _error == 0;
 }
 
-bool KittyIOFile::writeOffsetToFile(uintptr_t offset, size_t len, const std::string &filePath)
-{
-    _error = 0;
-
-    KittyIOFile of(filePath, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
-    if (!of.open())
-        return false;
-
-    std::vector<char> buffer(_bufferSize);
-    size_t remaining = len;
-    uintptr_t curr_off = offset;
-
-    while (remaining > 0)
-    {
-        size_t to_read = std::min(remaining, _bufferSize);
-        ssize_t nread = pread(curr_off, buffer.data(), to_read);
-        if (nread <= 0)
-            break;
-
-        if (of.write(buffer.data(), nread) != nread)
-            return false;
-
-        curr_off += nread;
-        remaining -= nread;
-    }
-
-    return remaining == 0;
-}
-
-bool KittyIOFile::writeToFd(int fd)
+bool KittyIOFile::copyToFd(int fd)
 {
     _error = 0;
 
     if (_fd < 0 || fd < 0)
         return false;
 
-    std::vector<char> buffer(_bufferSize);
-    uintptr_t offset = 0;
+    std::vector<char> buffer(KT_IO_CHUNK_SIZE, 0);
+    kt_off64_t offset = 0;
 
     while (true)
     {
@@ -259,11 +248,11 @@ bool KittyIOFile::writeToFd(int fd)
     return true;
 }
 
-void KittyIOFile::listFilesCallback(const std::string &dirPath, std::function<bool(const std::string &)> cb)
+bool KittyIOFile::listFilesCallback(const std::string &dirPath, std::function<bool(const std::string &)> cb)
 {
     DIR *dir = opendir(dirPath.c_str());
     if (!dir)
-        return;
+        return false;
 
     std::string base = dirPath;
     if (!base.empty() && base.back() != '/')
@@ -275,18 +264,40 @@ void KittyIOFile::listFilesCallback(const std::string &dirPath, std::function<bo
             continue;
 
         std::string path = base + f->d_name;
-        if (f->d_type == DT_DIR)
+
+        unsigned char d_type = f->d_type;
+        if (d_type == DT_UNKNOWN)
         {
-            listFilesCallback(path, cb);
+            kt_stat64_t st{};
+            if (kt_stat64(path.c_str(), &st) == 0)
+            {
+                if (S_ISDIR(st.st_mode))
+                    d_type = DT_DIR;
+                else if (S_ISREG(st.st_mode))
+                    d_type = DT_REG;
+            }
         }
-        else if (f->d_type == DT_REG)
+
+        if (d_type == DT_DIR)
+        {
+            if (listFilesCallback(path, cb))
+            {
+                closedir(dir);
+                return true;
+            }
+        }
+        else if (d_type == DT_REG)
         {
             if (cb && cb(path))
-                break;
+            {
+                closedir(dir);
+                return true;
+            }
         }
     }
 
     closedir(dir);
+    return false;
 }
 
 bool KittyIOFile::createDirectoryRecursive(const std::string &path, mode_t mode)
@@ -297,7 +308,6 @@ bool KittyIOFile::createDirectoryRecursive(const std::string &path, mode_t mode)
     std::string current;
     size_t pos = 0;
 
-    // Handle absolute paths
     if (path[0] == '/')
     {
         current = "/";
@@ -311,13 +321,11 @@ bool KittyIOFile::createDirectoryRecursive(const std::string &path, mode_t mode)
 
         if (!part.empty())
         {
-            // Append next path component
             if (!current.empty() && current.back() != '/')
                 current += "/";
-            
+
             current += part;
 
-            // Attempt to create directory
             if (mkdir(current.c_str(), mode) != 0)
             {
                 if (errno != EEXIST)

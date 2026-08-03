@@ -1,21 +1,49 @@
 #pragma once
 
+#include <sys/stat.h>
+
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <string>
-#include <cstdint>
 #include <vector>
 #include <utility>
 #include <unordered_map>
+#include <algorithm>
+#include <iostream>
+
+#include <cstdint>
+#include <cstring>
 
 #ifdef __ANDROID__
 #include <link.h>
 #include <dlfcn.h>
 #include <mutex>
+#elif __APPLE__
+#include <mach-o/loader.h>
+#include <mach-o/fat.h>
+#include <mach-o/dyld.h>
+#include <libkern/OSByteOrder.h>
 #endif
 
 #include "KittyMemory.hpp"
 
 namespace KittyScanner
 {
+    /**
+     * @brief Enables or disables syscall-based memory reads for pattern scanning.
+     *
+     * When enabled, pattern scanning functions use a safer syscall-based memory
+     * reading method instead of directly accessing the target memory region.
+     * This can prevent crashes when scanning invalid or inaccessible memory pages.
+     *
+     * When disabled, pattern scanning uses direct memory reads for better
+     * performance but may crash if the memory range contains invalid addresses.
+     *
+     * @param safeMode True to enable syscall-based reads, false to use direct reads.
+     */
+    void setPatternScanSafeMode(bool safeMode);
+
     /**
      * @brief Searches for bytes within a memory range and returns all results.
      *
@@ -41,7 +69,7 @@ namespace KittyScanner
      *
      * @return The first address where the bytes were found, or `0` if not found.
      */
-    uintptr_t findBytesFirst(const uintptr_t start, const uintptr_t end, const char *bytes, const std::string &mask);
+    uintptr_t findBytesFirst(uintptr_t start, uintptr_t end, const char *bytes, const std::string &mask);
 
     /**
      * @brief Searches for hex within a memory range and returns all results.
@@ -68,7 +96,7 @@ namespace KittyScanner
      *
      * @return The first address where the hex was found, or `0` if not found.
      */
-    uintptr_t findHexFirst(const uintptr_t start, const uintptr_t end, std::string hex, const std::string &mask);
+    uintptr_t findHexFirst(uintptr_t start, uintptr_t end, std::string hex, const std::string &mask);
 
     /**
      * @brief Searches for a pattern within a memory range using the IDA pattern syntax and returns all results.
@@ -79,7 +107,7 @@ namespace KittyScanner
      *
      * @return A vector containing all addresses where the pattern was found.
      */
-    std::vector<uintptr_t> findIdaPatternAll(const uintptr_t start, const uintptr_t end, const std::string &pattern);
+    std::vector<uintptr_t> findIdaPatternAll(uintptr_t start, uintptr_t end, const std::string &pattern);
 
     /**
      * @brief Searches for a pattern within a memory range using the IDA pattern syntax and returns the first result.
@@ -90,7 +118,7 @@ namespace KittyScanner
      *
      * @return The first address where the pattern was found, or `0` if not found.
      */
-    uintptr_t findIdaPatternFirst(const uintptr_t start, const uintptr_t end, const std::string &pattern);
+    uintptr_t findIdaPatternFirst(uintptr_t start, uintptr_t end, const std::string &pattern);
 
     /**
      * @brief Searches for data within a memory range and returns all results.
@@ -102,7 +130,7 @@ namespace KittyScanner
      *
      * @return A vector containing all addresses where the data was found.
      */
-    std::vector<uintptr_t> findDataAll(const uintptr_t start, const uintptr_t end, const void *data, size_t size);
+    std::vector<uintptr_t> findDataAll(uintptr_t start, uintptr_t end, const void *data, size_t size);
 
     /**
      * @brief Searches for data within a memory range and returns the first result.
@@ -114,26 +142,11 @@ namespace KittyScanner
      *
      * @return The first address where the data was found, or `0` if not found.
      */
-    uintptr_t findDataFirst(const uintptr_t start, const uintptr_t end, const void *data, size_t size);
+    uintptr_t findDataFirst(uintptr_t start, uintptr_t end, const void *data, size_t size);
 
 #ifdef __APPLE__
 
-    /**
-     * @brief Represents a memory range with address bounds and access permissions.
-     *        Used for both Mach-O segments and sections.
-     */
-    struct mem_range_info_t
-    {
-        uintptr_t start, end;
-        unsigned long size;
-        bool readable, writeable, executable;
-        mem_range_info_t() : start(0), end(0), size(0), readable(false), writeable(false), executable(false)
-        {
-        }
-
-        /** @brief Returns true if this range was found and has a non-zero start/end address and size. */
-        inline bool isValid() const { return start != 0 && end != 0 && size != 0; }
-    };
+    using KittyMemory::mem_range_info_t;
 
     /**
      * @brief Represents a loaded Mach-O image with pre-populated segments, sections, and bounds.
@@ -157,7 +170,7 @@ namespace KittyScanner
 
         static MachOImage parseImageAtIndex(uint32_t idx);
 
-public:
+    public:
         MachOImage() : _index(0), _header(nullptr), _slide(0), _endAddress(0), _size(0)
         {
         }
@@ -185,35 +198,62 @@ public:
         static std::vector<MachOImage> getAllImages();
 
         /** @brief Returns the dyld image index of this image. */
-        inline uint32_t index() const { return _index; }
+        inline uint32_t index() const
+        {
+            return _index;
+        }
 
         /** @brief Returns the Mach-O header pointer of this image. */
 #ifdef __LP64__
-        inline const mach_header_64 *header() const { return _header; }
+        inline const mach_header_64 *header() const
 #else
-        inline const mach_header *header() const { return _header; }
+        inline const mach_header *header() const
 #endif
+        {
+            return _header;
+        }
 
         /** @brief Returns the file path of this image. */
-        inline const char *name() const { return _name.c_str(); }
+        inline const char *name() const
+        {
+            return _name.c_str();
+        }
 
         /** @brief Returns the start address of this image. */
-        inline uintptr_t start() const { return reinterpret_cast<uintptr_t>(_header); }
+        inline uintptr_t start() const
+        {
+            return reinterpret_cast<uintptr_t>(_header);
+        }
 
         /** @brief Returns the end address of this image. */
-        inline uintptr_t end() const { return _endAddress; }
+        inline uintptr_t end() const
+        {
+            return _endAddress;
+        }
 
         /** @brief Returns the total size of this image in memory. */
-        inline size_t size() const { return _size; }
+        inline size_t size() const
+        {
+            return _size;
+        }
 
         /** @brief Returns the slide address of this image. */
-        inline uintptr_t slide() const { return _slide; }
+        inline uintptr_t slide() const
+        {
+            return _slide;
+        }
 
         /** @brief Returns true if this image was successfully found and parsed. */
-        inline bool isValid() const { return _header != nullptr && _slide != 0; }
+        inline bool isValid() const
+        {
+            return _header != nullptr && _size;
+        }
 
         /** @brief Returns the __PAGEZERO segment info, or a default-constructed range if not present. */
-        inline mem_range_info_t pageZero() const { return findSegment("__PAGEZERO"); }
+        inline mem_range_info_t pageZero() const
+        {
+            return findSegment("__PAGEZERO");
+        }
 
         /**
          * @brief Returns all non-STAB symbols from this image's symbol table mapped to their resolved addresses.
@@ -772,16 +812,32 @@ public:
      */
     struct kitty_soinfo_offsets_t
     {
-        uintptr_t base = 0;
-        uintptr_t size = 0;
-        uintptr_t phdr = 0;
-        uintptr_t phnum = 0;
-        uintptr_t dyn = 0;
-        uintptr_t strtab = 0;
-        uintptr_t symtab = 0;
-        uintptr_t strsz = 0;
-        uintptr_t bias = 0;
-        uintptr_t next = 0;
+        /**
+         * @brief Sentinel used for "offset not found yet", so a legitimately
+         * discovered offset of 0 can't be confused with "not found".
+         */
+        static constexpr uintptr_t noff = uintptr_t(-1);
+
+        uintptr_t base = noff;
+        uintptr_t size = noff;
+        uintptr_t phdr = noff;
+        uintptr_t phnum = noff;
+        uintptr_t dyn = noff;
+        uintptr_t strtab = noff;
+        uintptr_t symtab = noff;
+        uintptr_t strsz = noff;
+        uintptr_t bias = noff;
+        uintptr_t next = noff;
+
+        /**
+         * @brief Returns true if all offsets required to walk/parse soinfo structures were found.
+         * @note @ref strsz is optional and not required for validity.
+         */
+        inline bool isValid() const
+        {
+            return phdr != noff && phnum != noff && base != noff && size != noff && dyn != noff && strtab != noff &&
+                   symtab != noff && bias != noff && next != noff;
+        }
     };
 
     /**
@@ -826,6 +882,9 @@ public:
          */
         inline static LinkerScanner &Get()
         {
+            static std::mutex mtx;
+            std::lock_guard<std::mutex> lock(mtx);
+
             static LinkerScanner linker{};
             if (!linker.isValid() || !linker.init())
             {
@@ -1075,6 +1134,9 @@ public:
          */
         inline static NativeBridgeScanner &Get()
         {
+            static std::mutex mtx;
+            std::lock_guard<std::mutex> lock(mtx);
+
             static NativeBridgeScanner nb{};
             ((void)nb.init());
             return nb;

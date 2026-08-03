@@ -38,7 +38,7 @@ MemoryPatch MemoryPatch::createWithBytes(uintptr_t absolute_address, const void 
 
     // initialize patch & backup current content
     memcpy(&patch._patch_code[0], patch_code, patch_size);
-    KittyMemory::memRead(reinterpret_cast<const void *>(patch._address), &patch._orig_code[0], patch_size);
+    KittyMemory::memRead(patch._address, &patch._orig_code[0], patch_size);
     return patch;
 }
 
@@ -59,7 +59,7 @@ MemoryPatch MemoryPatch::createWithHex(uintptr_t absolute_address, std::string h
     KittyUtils::Data::fromHex(hex, &patch._patch_code[0]);
 
     // backup current content
-    KittyMemory::memRead(reinterpret_cast<const void *>(patch._address), &patch._orig_code[0], patch._size);
+    KittyMemory::memRead(patch._address, &patch._orig_code[0], patch._size);
     return patch;
 }
 
@@ -116,8 +116,6 @@ MemoryPatch MemoryPatch::createWithAsm(uintptr_t absolute_address,
         ks_free(insn_bytes);
     }
 
-    ks_close(ks);
-
     if (rt)
     {
         KITTY_LOGE("ks_asm failed (asm: %s, count = %zu, error = '%s') (code = %u).",
@@ -126,6 +124,8 @@ MemoryPatch MemoryPatch::createWithAsm(uintptr_t absolute_address,
                    ks_strerror(ks_errno(ks)),
                    ks_errno(ks));
     }
+
+    ks_close(ks);
 
     return patch;
 }
@@ -152,9 +152,9 @@ bool MemoryPatch::Restore()
         return false;
 
 #ifdef __ANDROID__
-    return KittyMemory::memExecWrite(reinterpret_cast<void *>(_address), &_orig_code[0], _size);
+    return KittyMemory::memExecWrite(_address, &_orig_code[0], _size);
 #elif __APPLE__
-    return KittyMemory::memWrite(reinterpret_cast<void *>(_address), &_orig_code[0], _size) == KittyMemory::KMS_SUCCESS;
+    return KittyMemory::memWrite(_address, &_orig_code[0], _size);
 #endif
 }
 
@@ -164,10 +164,9 @@ bool MemoryPatch::Modify()
         return false;
 
 #ifdef __ANDROID__
-    return KittyMemory::memExecWrite(reinterpret_cast<void *>(_address), &_patch_code[0], _size);
+    return KittyMemory::memExecWrite(_address, &_patch_code[0], _size);
 #elif __APPLE__
-    return KittyMemory::memWrite(reinterpret_cast<void *>(_address), &_patch_code[0], _size) ==
-           KittyMemory::KMS_SUCCESS;
+    return KittyMemory::memWrite(_address, &_patch_code[0], _size);
 #endif
 }
 

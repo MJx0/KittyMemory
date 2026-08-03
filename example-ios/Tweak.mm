@@ -20,7 +20,7 @@ struct MemPatches
     // etc...
 } gPatches;
 
-MachOImage g_MachoImg;
+MachOImage g_MachOImage;
 
 void test_thread()
 {
@@ -31,47 +31,78 @@ void test_thread()
     // loop until our target binary is found
     do
     {
-        sleep(1);
+        sleep(120);
 
         // base executable
-        g_MachoImg = MachOImage::getMainImage();
+        // g_MachOImage = MachOImage::getMainImage();
 
         // or framework
-        // g_MachoImg = MachOImage::findMachOImage("UnityFramework");
+        g_MachOImage = MachOImage::findMachOImage("UnityFramework");
 
-    } while (!g_MachoImg.isValid());
+    } while (!g_MachOImage.isValid());
 
-    KITTY_LOGI("UnityFramework slide: %p", (void *)g_MachoImg.slide());
-    KITTY_LOGI("UnityFramework start: %p", (void *)g_MachoImg.start());
-    KITTY_LOGI("UnityFramework end: %p", (void *)g_MachoImg.end());
-    KITTY_LOGI("UnityFramework size: %p", (void *)g_MachoImg.size());
+    KITTY_LOGI("UnityFramework slide: %p", (void *)g_MachOImage.slide());
+    KITTY_LOGI("UnityFramework start: %p", (void *)g_MachOImage.start());
+    KITTY_LOGI("UnityFramework end: %p", (void *)g_MachOImage.end());
+    KITTY_LOGI("UnityFramework size: %p", (void *)g_MachOImage.size());
+    KITTY_LOGI("UnityFramework path: %{public}s", g_MachOImage.name());
 
     KITTY_LOGI("=========== SEGMENTS & SECTIONS ============");
 
-    KITTY_LOGI("segments count: %d", int(g_MachoImg.segments().size()));
-    for (auto &it : g_MachoImg.segments())
+    KITTY_LOGI("segments count: %d", int(g_MachOImage.segments().size()));
+    for (auto &it : g_MachOImage.segments())
     {
         KITTY_LOGI("%{public}s -> %p", it.first.c_str(), (void *)it.second.start);
     }
 
-    KITTY_LOGI("sections count: %d", int(g_MachoImg.sections().size()));
-    for (auto &it : g_MachoImg.sections())
+    KITTY_LOGI("sections count: %d", int(g_MachOImage.sections().size()));
+    for (auto &it : g_MachOImage.sections())
     {
         KITTY_LOGI("%{public}s -> %p", it.first.c_str(), (void *)it.second.start);
     }
 
     KITTY_LOGI("=============== FIND SYMBOL ================");
 
-    KITTY_LOGI("symbols count: %d", int(g_MachoImg.symbols().size()));
+    KITTY_LOGI("symbols count: %d", int(g_MachOImage.symbols().size()));
 
     // you may have to prefix function name with underscore
 
     // with existing MachOImage object
-    KITTY_LOGI("il2cpp_string_new: %p", (void *)(g_MachoImg.findSymbol("_il2cpp_string_new")));
+    KITTY_LOGI("il2cpp_string_new: %p", (void *)(g_MachOImage.findSymbol("_il2cpp_string_new")));
+
+    KITTY_LOGI("============= FIND MEMORY MAPPED FILES =============");
+
+    // better to search late into the game to get finalized metadata regions
+    // if there are multiple mappings, in most cases choose the one that's closes to original file size on disk
+    {
+        auto unityMetadataMappings = KittyMemory::getFileMappings("global-metadata.dat");
+        KITTY_LOGI("unityMetadataMappings: %d", int(unityMetadataMappings.size()));
+        for (size_t i = 0; i < unityMetadataMappings.size(); i++)
+        {
+            uintptr_t start = unityMetadataMappings[i].front().start;
+            uintptr_t end = unityMetadataMappings[i].back().end;
+            KITTY_LOGI("unityMetadataMappings[%d]: %p - %p", int(i), (void *)start, (void *)end);
+        }
+
+        NSString *appDocDir = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
+        NSString *dumpDir = [NSString stringWithFormat:@"%@/Dump", appDocDir];
+        KittyIOFile::createDirectoryRecursive(dumpDir.UTF8String);
+
+        // dump metadata
+        std::string dumpDatPath = KittyUtils::String::fmt("%s/global-metadata.dat", dumpDir.UTF8String);
+        if (KittyMemory::dumpFileMappingsToDisk("global-metadata.dat", dumpDatPath))
+        {
+            KITTY_LOGI("Dumped Unity global-metadata mappings at %{public}s", dumpDir.UTF8String);
+        }
+        else
+        {
+            KITTY_LOGI("Failed to dump Unity global-metadata!");
+        }
+    }
 
     KITTY_LOGI("==================== MEMORY PATCH ===================");
 
-    uintptr_t unityBase = g_MachoImg.slide();
+    uintptr_t unityBase = g_MachOImage.slide();
 
 #ifndef kNO_KEYSTONE
     // with asm (uses keystone assembler) insert ';' to seperate statements
@@ -82,9 +113,9 @@ void test_thread()
 
     // format asm
     std::string asm_fmt = KittyUtils::String::fmt("mov x0, #%d; ret", 65536);
-    gPatches.get_gold = MemoryPatch::createWithAsm(unityBase + 0xE4EB8, MP_ASM_ARM64, asm_fmt);
-#endif
 
+    gPatches.get_gold = MemoryPatch::createWithAsm(unityBase + 0x2A17E04, MP_ASM_ARM64, asm_fmt);
+#endif
 
     // hex with or without spaces both are fine
     gPatches.get_canShoot = MemoryPatch::createWithHex(unityBase + 0x10948D4, "01 00 A0 E3 1E FF 2F E1");
@@ -94,7 +125,6 @@ void test_thread()
     gPatches.get_canShoot = MemoryPatch::createWithBytes(unityBase + 0x1019C1F20,
                                                          "\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1",
                                                          8);
-
 
     KITTY_LOGI("Patch Address: %p", (void *)gPatches.get_canShoot.get_TargetAddress());
     KITTY_LOGI("Patch Size: %zu", gPatches.get_canShoot.get_PatchSize());
@@ -124,17 +154,19 @@ void test_thread()
     if (writeData32(unityBase + 0x1019C1F20, 0x200080D2) && writeData32(unityBase + 0x1019C1F20 + 4, 0xC0035FD6))
         KITTY_LOGI("get_canShoot has been modified successfully");
 
-
     KITTY_LOGI("=============== PATTERN SCAN ===============");
 
     // scan within a memory range for bytes with mask x and ?
 
+    // enables or disables syscall-based memory reads for safe pattern scanning.
+    // KittyScanner::setPatternScanSafeMode(true);
+
     // get start & end address of __TEXT segment
-    mem_range_info_t text_seg = g_MachoImg.findSegment("__TEXT");
+    mem_range_info_t text_seg = g_MachOImage.findSegment("__TEXT");
     KITTY_LOGI("__TEXT Address: %p | Size: %p", (void *)text_seg.start, (void *)text_seg.size);
 
     // get start & end address of __DATA segment
-    mem_range_info_t data_seg = g_MachoImg.findSegment("__DATA");
+    mem_range_info_t data_seg = g_MachOImage.findSegment("__DATA");
     KITTY_LOGI("__DATA Address: %p | Size: %p", (void *)data_seg.start, (void *)data_seg.size);
 
     uintptr_t found_at = 0;
@@ -179,13 +211,13 @@ void test_thread()
     KITTY_LOGI("================= HEX DUMP =================");
 
     // hex dump by default 8 rows with ASCII
-    KITTY_LOGI("%{public}s", KittyUtils::Data::hexDump(g_MachoImg.header(), sizeof(*g_MachoImg.header())).c_str());
+    KITTY_LOGI("\n%{public}s", KittyUtils::Data::hexDump(g_MachOImage.header(), sizeof(*g_MachOImage.header())).c_str());
 
     KITTY_LOGI("============================================");
 
     // 16 rows, no ASCII
     KITTY_LOGI("\n%{public}s",
-               KittyUtils::Data::hexDump<16, false>(g_MachoImg.header(), sizeof(*g_MachoImg.header())).c_str());
+               KittyUtils::Data::hexDump<16, false>(g_MachOImage.header(), sizeof(*g_MachOImage.header())).c_str());
 }
 
 __attribute__((constructor)) void init()

@@ -45,10 +45,10 @@ private:
     };
 
     std::vector<RegionInfo> cachedRegions_;
-    const mach_port_t task_ = mach_task_self();
-    const size_t page_size_ = sysconf(_SC_PAGESIZE);
-    bool use_cache_ = true;
-    size_t last_region_index_ = 0;
+    const mach_port_t task_;
+    const size_t page_size_;
+    bool use_cache_;
+    size_t last_region_index_;
 
     bool _findRegion(uintptr_t addr, RegionInfo *region);
 
@@ -204,10 +204,10 @@ private:
     };
 
     std::vector<RegionInfo> cachedRegions_;
-    pid_t pid_ = getpid();
-    const size_t page_size_ = sysconf(_SC_PAGESIZE);
-    bool use_cache_ = true;
-    size_t last_region_index_ = 0;
+    pid_t pid_;
+    const size_t page_size_;
+    bool use_cache_;
+    size_t last_region_index_;
 
     bool _parseMapsLine(const char *line, RegionInfo *region);
 
@@ -304,7 +304,7 @@ public:
     {
         if (ptr == 0)
             return false;
-        ptr = KittyUtils::untagHeepPtr(ptr);
+        ptr = KittyUtils::untagPointer(ptr);
         RegionInfo region(0, 0, false, false, false);
         return _findRegion(ptr, &region);
     }
