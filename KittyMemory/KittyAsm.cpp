@@ -114,9 +114,14 @@ namespace KittyArm32
                 insn.rn = regName(rn);
 
             if (!I)
-                insn.rt = regName(imm12);
+            {
+                // register-shifted-register operand: Rm is bits[3:0], not the whole 12-bit shifter operand
+                insn.rt = regName(bits(imm12, 3, 0));
+            }
             else
-                insn.immediate = I ? imm32 : 0;
+            {
+                insn.immediate = imm32;
+            }
 
             if (rn == 15)
                 insn.target = address + 8u + insn.immediate;
@@ -456,7 +461,7 @@ namespace KittyArm64
             uint32_t rd = bits(instr, 4, 0);
             uint32_t imm16 = bits(instr, 20, 5);
             uint32_t hw = bits(instr, 22, 21);
-            uint64_t imm = (uint64_t)(imm16 << (hw * 16));
+            uint64_t imm = (uint64_t)imm16 << (hw * 16);
             insn.rd = is64 ? xRegName(rd, false) : wRegName(rd, false);
             insn.immediate = insn_type != EKittyInsnTypeArm64::MOVN ? imm : (int64_t)~imm;
             break;
@@ -595,7 +600,7 @@ namespace KittyArm64
         case EKittyInsnTypeArm64::CBZ:
         case EKittyInsnTypeArm64::CBNZ:
         {
-            bool is64 = bit(instr, 32);
+            bool is64 = bit(instr, 31);
             uint32_t imm19 = bits(instr, 23, 5);
             uint32_t rt = bits(instr, 4, 0);
             int64_t simm = signExtend(imm19, 19) << 2;
@@ -608,7 +613,7 @@ namespace KittyArm64
         case EKittyInsnTypeArm64::TBZ:
         case EKittyInsnTypeArm64::TBNZ:
         {
-            bool is64 = bit(instr, 32);
+            bool is64 = bit(instr, 31);
             uint32_t rt = bits(instr, 4, 0);
             uint32_t bit5 = (bits(instr, 31, 31) & 1) << 5;
             uint32_t bit_lo = bits(instr, 23, 19);
