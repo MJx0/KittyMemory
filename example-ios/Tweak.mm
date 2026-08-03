@@ -31,7 +31,7 @@ void test_thread()
     // loop until our target binary is found
     do
     {
-        sleep(120);
+        sleep(1);
 
         // base executable
         // g_MachOImage = MachOImage::getMainImage();
