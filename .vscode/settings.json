@@ -1,0 +1,24 @@
+{
+    // CMake Tools — use CMakePresets.json for all configuration
+    "cmake.useCMakePresets": "always",
+    "cmake.configureOnOpen": true,
+    "cmake.configureOnEdit": false,
+    "cmake.clearOutputBeforeBuild": true,
+    "cmake.deleteBuildDirOnCleanConfigure": true,
+    // Copies compile_commands.json from the active preset's build dir to the
+    // project root so clangd picks it up without extra configuration.
+    "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
+
+    // Wrapper script that picks clangd based on which compile_commands.json is currently active.
+    // After switching presets: Cmd+Shift+P → "clangd: Restart language server"
+    "clangd.useScriptAsExecutable": true,
+    "clangd.path": "${workspaceFolder}/.vscode/clangd-selector.cmd",
+
+    // clangd arguments — apply to whichever clangd the selector picks
+    "clangd.arguments": [
+        "--header-insertion=never",
+        "--compile-commands-dir=${workspaceFolder}",
+        "--background-index",
+        "--clang-tidy=false"
+    ]
+}
