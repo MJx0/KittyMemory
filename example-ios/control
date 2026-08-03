@@ -3,7 +3,7 @@ Name: example
 Depends: mobilesubstrate
 Version: 0.0.1
 Architecture: iphoneos-arm
-Description: Test tweak for fwd assault
+Description: Test tweak
 Maintainer: CyberCat
 Author: CyberCat
 Section: Tweaks
