@@ -616,6 +616,49 @@ namespace KittyAsm
     }
 
     /**
+     * @brief Reverses the byte order of a 16-bit unsigned integer.
+     *
+     * @param value The input 16-bit unsigned integer.
+     * @return The byte-swapped 16-bit unsigned integer.
+     */
+    inline uint16_t swap16(uint16_t value)
+    {
+        return static_cast<uint16_t>((value >> 8) | (value << 8));
+    }
+
+    /**
+     * @brief Reverses the byte order of a 32-bit unsigned integer.
+     *
+     * @param value The input 32-bit unsigned integer.
+     * @return The byte-swapped 32-bit unsigned integer.
+     */
+    inline uint32_t swap32(uint32_t value)
+    {
+        return ((value & 0x000000FFu) << 24) |
+               ((value & 0x0000FF00u) << 8)  |
+               ((value & 0x00FF0000u) >> 8)  |
+               ((value & 0xFF000000u) >> 24);
+    }
+
+    /**
+     * @brief Reverses the byte order of a 64-bit unsigned integer.
+     *
+     * @param value The input 64-bit unsigned integer.
+     * @return The byte-swapped 64-bit unsigned integer.
+     */
+    inline uint64_t swap64(uint64_t value)
+    {
+        return ((value & 0x00000000000000FFull) << 56) |
+               ((value & 0x000000000000FF00ull) << 40) |
+               ((value & 0x0000000000FF0000ull) << 24) |
+               ((value & 0x00000000FF000000ull) << 8)  |
+               ((value & 0x000000FF00000000ull) >> 8)  |
+               ((value & 0x0000FF0000000000ull) >> 24) |
+               ((value & 0x00FF000000000000ull) >> 40) |
+               ((value & 0xFF00000000000000ull) >> 56);
+    }
+
+    /**
      * @brief Formats a value as a "0x"-prefixed, upper-case hex string.
      *
      * The one place both architectures' ToString() render an address or
