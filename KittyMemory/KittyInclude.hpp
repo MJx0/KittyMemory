@@ -10,6 +10,7 @@
 
 #ifdef __ANDROID__
 using KittyMemory::ProcMap;
+using KittyMemory::ProcStatus;
 using KittyMemory::EProcMapFilter;
 using KittyScanner::RegisterNativeFn;
 using KittyScanner::ElfScanner;

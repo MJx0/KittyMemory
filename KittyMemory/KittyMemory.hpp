@@ -6,6 +6,7 @@
 #ifdef __ANDROID__
 #include <dlfcn.h>
 #include <unordered_map>
+#include <fstream>
 
 #elif __APPLE__
 #include <mach/mach.h>
@@ -131,11 +132,132 @@ namespace KittyMemory
     };
 
     /**
+     * @brief Class to retrieve process status information.
+     */
+    class ProcStatus
+    {
+        pid_t _tid;
+        std::unordered_map<std::string, std::string> data;
+        static bool parse(const std::string &path, ProcStatus *out);
+
+    public:
+        ProcStatus() : _tid(-1)
+        {
+        }
+        ~ProcStatus()
+        {
+            data.clear();
+        }
+
+        /**
+         * @brief Parses the status of the current process.
+         *
+         * @param out A pointer to the ProcStatus object where the parsed data will be stored.
+         * @return True if parsing was successful, false otherwise.
+         */
+        inline static bool parse(ProcStatus *out)
+        {
+            if (!out)
+                return false;
+
+            return parse("/proc/" + std::to_string(getpid()) + "/status", out);
+        }
+
+        /**
+         * @brief Parses the status of the current process given its thread ID.
+         *
+         * @param tid The thread ID of the process.
+         * @param out A pointer to the ProcStatus object where the parsed data will be stored.
+         * @return True if parsing was successful, false otherwise.
+         */
+        inline static bool parse(pid_t tid, ProcStatus *out)
+        {
+            if (tid <= 0 || !out)
+                return false;
+
+            out->_tid = tid;
+            return parse("/proc/" + std::to_string(getpid()) + "/task/" + std::to_string(tid) + "/status", out);
+        }
+
+        /**
+         * @brief Refreshes the process status.
+         *
+         * If the tid is less than or equal to 0, it calls the parse function with the pid.
+         * If the tid is greater than 0, it calls the parse function with the pid and tid.
+         *
+         * @return True if refreshing was successful, false otherwise.
+         */
+        inline bool refresh()
+        {
+            return _tid <= 0 ? parse(this) : parse(_tid, this);
+        }
+
+        /**
+         * @brief Checks if the process status data contains a specific key.
+         *
+         * @param key The key to check.
+         * @return True if the key exists, false otherwise.
+         */
+        inline bool contains(const std::string &key) const
+        {
+            return data.find(key) != data.end();
+        }
+
+        /**
+         * @brief Retrieves the string value associated with a key.
+         *
+         * @param key The key to retrieve.
+         * @return The string value associated with the key, or an empty string if the key is not found.
+         */
+        inline std::string getString(const std::string &key) const
+        {
+            auto it = data.find(key);
+            return (it != data.end()) ? it->second : "";
+        }
+
+        /**
+         * @brief Retrieves the integer value associated with a key.
+         *
+         * @param key The key to retrieve.
+         * @return The integer value associated with the key, or 0 if the key is not found.
+         */
+        inline long long getInt(const std::string &key) const
+        {
+            auto it = data.find(key);
+            if (it == data.end())
+                return 0;
+
+            return std::strtoll(it->second.c_str(), nullptr, 10);
+        }
+
+        /**
+         * @brief Retrieves the boolean value associated with a key.
+         *
+         * @param key The key to retrieve.
+         * @return True if the key's value is 1, false otherwise.
+         */
+        inline bool getBool(const std::string &key) const
+        {
+            return getInt(key) == 1;
+        }
+    };
+
+    /**
      * @brief Reads /proc/self/cmdline to get the name of the current process.
      *
      * @return Name of the current process.
      */
     std::string getProcessName();
+
+    /**
+     * @brief Retrieves a list of thread IDs for the current process.
+     *
+     * This function retrieves the thread IDs of all threads associated with the current process
+     * by examining the `/proc/self/task` directory.
+     *
+     * @return A vector of thread IDs for the specified process.
+     */
+    std::vector<pid_t> getAllThreads();
 
     /**
      * @brief Retrieves information about all memory maps in the current process.

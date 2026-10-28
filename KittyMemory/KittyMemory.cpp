@@ -53,6 +53,80 @@ namespace KittyMemory
         return cmdline;
     }
 
+    std::vector<pid_t> getAllThreads()
+    {
+        pid_t pid = getpid();
+
+        std::vector<pid_t> tids;
+        if (pid <= 0)
+            return tids;
+
+        char filePath[256] = {0};
+        snprintf(filePath, sizeof(filePath), "/proc/%d/task", pid);
+
+        errno = 0;
+        DIR *dir = opendir(filePath);
+        if (!dir)
+        {
+            KITTY_LOGD("Couldn't open %s, error=%s", filePath, strerror(errno));
+            return tids;
+        }
+
+        dirent *entry = nullptr;
+        while ((entry = readdir(dir)) != nullptr)
+        {
+            if (entry->d_name[0] == '.')
+                continue;
+
+            int entry_tid = atoi(entry->d_name);
+            if (entry_tid > 0)
+            {
+                tids.push_back(entry_tid);
+            }
+        }
+        closedir(dir);
+        return tids;
+    }
+
+    bool ProcStatus::parse(const std::string &path, ProcStatus *out)
+    {
+        if (out)
+            out->data.clear();
+
+        std::ifstream file(path.c_str());
+        if (!file.is_open())
+            return false;
+
+        std::string line;
+
+        while (std::getline(file, line))
+        {
+            std::size_t colon = line.find(':');
+            if (colon == std::string::npos)
+                continue;
+
+            std::string key = line.substr(0, colon);
+
+            while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back())))
+                key.pop_back();
+
+            const char *p = line.c_str() + colon + 1;
+
+            while (*p && std::isspace(static_cast<unsigned char>(*p)))
+                ++p;
+
+            std::string value(p);
+
+            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
+                value.pop_back();
+
+            if (out)
+                out->data.emplace(std::move(key), std::move(value));
+        }
+
+        return true;
+    }
+
     std::vector<ProcMap> getAllMaps()
     {
         std::vector<ProcMap> retMaps;
