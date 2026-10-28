@@ -342,7 +342,7 @@ namespace KittyMemory
 
             int oldProt = map.protection;
             bool restoreProtection = false;
-            bool permissionGranted = (oldProt & requiredProt);
+            bool permissionGranted = (oldProt & requiredProt) == requiredProt;
 
             if (!permissionGranted)
             {
@@ -943,7 +943,7 @@ namespace KittyMemory
 
             vm_prot_t oldProt = info.protection;
             bool restoreProtection = false;
-            bool permissionGranted = (oldProt & requiredProt);
+            bool permissionGranted = (oldProt & requiredProt) == requiredProt;
 
             if (!permissionGranted)
             {
